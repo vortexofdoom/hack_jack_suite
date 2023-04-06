@@ -6,9 +6,10 @@ use crate::jack_compiler::{
         Keyword::{self, *},
         Token,
     },
-    vm_writer::{CodeWriter, Comparison::*, MemSegment as Mem, VmCommand, VmWriter},
+    vm_writer::{CodeWriter, VmWriter},
     //xml_writer::XMLWriter,
 };
+use crate::tokens::vm_commands::{VmCommand, Comparison::*, MemSegment as Mem};
 use std::path::PathBuf;
 
 pub struct CompilationEngine {

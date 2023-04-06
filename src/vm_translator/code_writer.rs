@@ -1,4 +1,4 @@
-use crate::vm_translator::{VmCommand, Comparison, MemSegment};
+use crate::tokens::vm_commands::{VmCommand, Comparison, MemSegment};
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -8,8 +8,8 @@ pub struct CodeWriter {
     filename: String,
     writer: BufWriter<File>,
     curr_func: String,
-    comp_count: u16,
-    call_count: u16,
+    comp_count: i16,
+    call_count: i16,
     return_written: bool,
 }
 
@@ -54,6 +54,7 @@ impl CodeWriter {
     ").expect("failed to insert comment");
 }
 
+    #[allow(overflowing_literals)]
     pub fn generate_code(&mut self, command: VmCommand, comment: bool) {
         if comment {
             write!(self.writer, "// {command}").expect("failed to write comment");
@@ -140,7 +141,7 @@ fn arithmetic_two_args(last_line: &str) -> String {
 }
 
 // eq, gt, lt
-fn comparison(comparison: Comparison, counter: u16) -> String {
+fn comparison(comparison: Comparison, counter: i16) -> String {
     let comp_str = match comparison {
         // jumping if comparison is false
         Comparison::Eq => "NE",
@@ -160,7 +161,7 @@ fn comparison(comparison: Comparison, counter: u16) -> String {
 }
 
 // local, argument, this, that
-pub fn push_segment<T>(segment: T, n: u16) -> String
+pub fn push_segment<T>(segment: T, n: i16) -> String
 where T: Display {
     format!("\
     @{n}
@@ -174,7 +175,7 @@ where T: Display {
     M=D
     ")
 }
-pub fn pop_segment<T>(segment: T, n: u16) -> String
+pub fn pop_segment<T>(segment: T, n: i16) -> String
 where T: Display {
     format!("\
     @{n}
@@ -234,7 +235,7 @@ fn if_goto(label: String) -> String {
     ")
 }
 
-fn func(fn_name: &str, n_vars: u16) -> String {
+fn func(fn_name: &str, n_vars: i16) -> String {
     format!("\
 ({fn_name})
     @{n_vars}
@@ -255,7 +256,7 @@ fn func(fn_name: &str, n_vars: u16) -> String {
     ")
 }
 
-fn call_func(function: &str, n_args: u16, return_label: String) -> String {
+fn call_func(function: &str, n_args: i16, return_label: String) -> String {
     let saved_return_addr = push_value(&return_label, true);
     let saved_lcl = push_value("LCL", false);
     let saved_arg = push_value("ARG", false);

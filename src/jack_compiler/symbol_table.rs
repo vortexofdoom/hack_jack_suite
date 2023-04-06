@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::jack_compiler::{compilation_engine::CompilationError, vm_writer::MemSegment};
+use crate::jack_compiler::compilation_engine::CompilationError;
+use crate::tokens::vm_commands::MemSegment;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {

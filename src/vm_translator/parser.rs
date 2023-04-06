@@ -1,4 +1,4 @@
-use crate::vm_translator::{VmCommand, Comparison::{Eq, GT, LT}, MemSegment};
+use crate::tokens::vm_commands::{VmCommand, Comparison::{Eq, GT, LT}, MemSegment};
 
 pub fn parse(cmd: &str) -> Result<VmCommand, String> {
     //asm.push(code_writer::comment(cmd)); // comment with original vm command, stored separately so it can be skipped
@@ -28,11 +28,7 @@ pub fn parse(cmd: &str) -> Result<VmCommand, String> {
             }
         }
         3 => {
-            let arg = match (parts[2].parse::<u16>(), parts[2].parse::<i16>()) {
-                (Ok(x), _) => x,
-                (Err(_), Ok(y)) => y as u16,
-                _ => return Err(format!("{} is not a valid 16 bit integer", parts[2])),
-            };
+            let arg = parts[2].parse::<i16>().map_err(|_| format!("{} is not a valid 16 bit integer", parts[2]))?;
 
             match (parts[0], parts[1]) {
                 ("push", "local")    => VmCommand::Push(MemSegment::Local, arg),
