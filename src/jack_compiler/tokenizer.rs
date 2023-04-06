@@ -1,4 +1,5 @@
-use crate::jack_compiler::{compilation_engine::CompilationError, tokens::*};
+use crate::jack_compiler::{compilation_engine::CompilationError};
+use crate::tokens::jack_tokens::*;
 use std::collections::VecDeque;
 
 impl From<std::num::ParseIntError> for CompilationError {

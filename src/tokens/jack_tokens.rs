@@ -4,7 +4,7 @@ use std::{
 };
 use Keyword::*;
 
-use crate::jack_compiler::token_type::TokenType;
+use crate::tokens::token_type::TokenType;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {

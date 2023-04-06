@@ -5,14 +5,9 @@ use std::{
     path::Path,
 };
 
-use crate::jack_compiler::tokens::{Keyword::*, Token};
+use crate::tokens::jack_tokens::{Keyword::*, Token};
 use crate::tokens::vm_commands::{VmCommand, Comparison, MemSegment};
-
-pub trait CodeWriter: Default {
-    fn write(&mut self, contents: impl Display);
-    fn flush(&mut self);
-    fn new(filename: &str) -> Self;
-}
+use super::CodeWriter;
 
 #[derive(Default)]
 pub struct VmWriter {

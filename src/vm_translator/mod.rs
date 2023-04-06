@@ -1,15 +1,12 @@
-use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::vec;
 
-use code_writer::CodeWriter;
-
-pub mod code_writer;
+use crate::code_writer::asm_writer::AsmWriter;
 pub mod parser;
 
-fn main() {
+fn translate_vm() {
     let args: Vec<String> = std::env::args().collect();
     let mut files: Vec<PathBuf> = vec![];
     let file_path = Path::new(&args[1]);
@@ -31,7 +28,7 @@ fn main() {
     } else if let Some("vm") = file_path.extension().unwrap().to_str() {
         files.push(file_path.to_path_buf())
     }
-    let mut writer = CodeWriter::new(filename, bootstrap);
+    let mut writer = AsmWriter::new(filename, bootstrap);
     for file in files {
         if let Ok(f) = File::open(&file) {
             writer.set_file_name(&file

@@ -160,7 +160,7 @@ impl Assembler {
     }
 }
 
-fn main() {
+fn write_asm() {
     let args: Vec<String> = std::env::args().collect();
     let filename = args[1].clone();
     let mut asm = vec![];

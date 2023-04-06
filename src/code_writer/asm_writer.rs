@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-pub struct CodeWriter {
+pub struct AsmWriter {
     filename: String,
     writer: BufWriter<File>,
     curr_func: String,
@@ -13,7 +13,7 @@ pub struct CodeWriter {
     return_written: bool,
 }
 
-impl CodeWriter {
+impl AsmWriter {
     pub fn new(filename: &str, bootstrap: bool) -> Self {
         let output = File::create(Path::new(filename).with_extension("asm")).expect("could not create file");
         let mut writer = BufWriter::new(output);
@@ -29,7 +29,7 @@ impl CodeWriter {
     {call_sys_init}
     ").expect("failed to write bootstrap code");
         };
-        CodeWriter {
+        AsmWriter {
             filename: filename.to_string(),
             writer: writer,
             curr_func: format!("${filename}$"),
