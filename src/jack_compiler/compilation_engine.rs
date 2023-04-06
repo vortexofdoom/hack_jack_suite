@@ -1,15 +1,18 @@
 use crate::jack_compiler::{
     symbol_table::*,
-    token_type::{TokenType, ValidToken},
     tokenizer::Tokenizer,
-    tokens::{
+    //xml_writer::XMLWriter,
+};
+use crate::tokens::{
+    vm_commands::{VmCommand, Comparison::*, MemSegment as Mem},
+    token_type::{TokenType, ValidToken},
+    jack_tokens::{
         Keyword::{self, *},
         Token,
     },
-    vm_writer::{CodeWriter, VmWriter},
-    //xml_writer::XMLWriter,
 };
-use crate::tokens::vm_commands::{VmCommand, Comparison::*, MemSegment as Mem};
+use crate::code_writer::{CodeWriter, vm_writer::VmWriter};
+
 use std::path::PathBuf;
 
 pub struct CompilationEngine {
@@ -31,7 +34,7 @@ pub enum CompilationError {
     UnexpectedEndofTokens,
 }
 
-use crate::jack_compiler::token_type::TokenType::*;
+use crate::tokens::token_type::TokenType::*;
 impl CompilationEngine {
     pub fn new() -> Self {
         CompilationEngine {
