@@ -13,6 +13,7 @@ use crate::tokens::{
 };
 use crate::code_writer::{CodeWriter, vm_writer::VmWriter};
 
+// TODO: Remove when code generation and file writing are separated
 use std::path::PathBuf;
 
 pub struct CompilationEngine {

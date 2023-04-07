@@ -2,6 +2,7 @@ mod vm_translator;
 mod jack_compiler;
 mod tokens;
 mod code_writer;
+mod cpu;
 
 use std::path::{Path, PathBuf};
 use crate::jack_compiler::compilation_engine::CompilationEngine;

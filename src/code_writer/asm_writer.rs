@@ -192,7 +192,7 @@ where T: Display {
 // static, pointer, constant (push only)
 fn push_value<T>(var: T, use_a_over_m: bool) -> String
 where T: Display {
-    let comp_a_or_m = if use_a_over_m {"A"} else {"M"};
+    let comp_a_or_m = if use_a_over_m {'A'} else {'M'};
     format!("\
     @{var}
     D={comp_a_or_m}
