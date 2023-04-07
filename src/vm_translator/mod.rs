@@ -10,11 +10,7 @@ fn translate_vm() {
     let args: Vec<String> = std::env::args().collect();
     let mut files: Vec<PathBuf> = vec![];
     let file_path = Path::new(&args[1]);
-    let filename = file_path
-        .file_stem()
-        .unwrap()
-        .to_str()
-        .unwrap();
+    let filename = file_path.file_stem().unwrap().to_str().unwrap();
     let mut bootstrap = false;
     if file_path.is_dir() {
         bootstrap = true;
@@ -31,25 +27,18 @@ fn translate_vm() {
     let mut writer = AsmWriter::new(filename, bootstrap);
     for file in files {
         if let Ok(f) = File::open(&file) {
-            writer.set_file_name(&file
-                .file_stem()
-                .unwrap()
-                .to_str()
-                .unwrap()
-            );
+            writer.set_file_name(file.file_stem().unwrap().to_str().unwrap());
             let reader = BufReader::new(f);
-            for line in reader.lines() {
-                if let Ok(s) = line {
-                    let cmd = s
-                        .find("//")
-                        .map(|i| &s[..i])
-                        .unwrap_or(&s)
-                        .trim()
-                        .to_string();
-                    if !cmd.is_empty() {
-                        let vm_cmd = parser::parse(&cmd).expect("could not parse command");
-                        writer.generate_code(vm_cmd, true);
-                    }
+            for line in reader.lines().flatten() {
+                let cmd = line
+                    .find("//")
+                    .map(|i| &line[..i])
+                    .unwrap_or(&line)
+                    .trim()
+                    .to_string();
+                if !cmd.is_empty() {
+                    let vm_cmd = parser::parse(&cmd).expect("could not parse command");
+                    writer.generate_code(vm_cmd, true);
                 }
             }
         }

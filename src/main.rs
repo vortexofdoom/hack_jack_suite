@@ -1,15 +1,15 @@
-mod vm_translator;
-mod jack_compiler;
-mod tokens;
+#[allow(dead_code)]
 mod code_writer;
 mod cpu;
+mod jack_compiler;
+mod tokens;
+mod vm_translator;
 
-use std::path::{Path, PathBuf};
 use crate::jack_compiler::compilation_engine::CompilationEngine;
+use std::path::{Path, PathBuf};
 
 #[macro_use]
 extern crate lazy_static;
-
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -31,4 +31,3 @@ fn main() {
         parser.compile(file).expect("error");
     }
 }
-

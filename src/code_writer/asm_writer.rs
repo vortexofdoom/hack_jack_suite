@@ -1,4 +1,4 @@
-use crate::tokens::vm_commands::{VmCommand, Comparison, MemSegment};
+use crate::tokens::vm_commands::{Comparison, MemSegment, VmCommand};
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -15,11 +15,14 @@ pub struct AsmWriter {
 
 impl AsmWriter {
     pub fn new(filename: &str, bootstrap: bool) -> Self {
-        let output = File::create(Path::new(filename).with_extension("asm")).expect("could not create file");
+        let output =
+            File::create(Path::new(filename).with_extension("asm")).expect("could not create file");
         let mut writer = BufWriter::new(output);
         if bootstrap {
-            let call_sys_init = call_func("Sys.init", 0, format!("Sys.init never returns"));
-            write!(writer, "\
+            let call_sys_init = call_func("Sys.init", 0, String::from("Sys.init never returns"));
+            write!(
+                writer,
+                "\
 // bootstrap code
     @256
     D=A
@@ -27,11 +30,13 @@ impl AsmWriter {
     M=D
 // call sys_init
     {call_sys_init}
-    ").expect("failed to write bootstrap code");
+    "
+            )
+            .expect("failed to write bootstrap code");
         };
         AsmWriter {
             filename: filename.to_string(),
-            writer: writer,
+            writer,
             curr_func: format!("${filename}$"),
             comp_count: 0,
             call_count: 0,
@@ -49,10 +54,14 @@ impl AsmWriter {
 
     // comment
     pub fn comment(&mut self, comment: &str) {
-    write!(self.writer, "
+        write!(
+            self.writer,
+            "
 // {comment}
-    ").expect("failed to insert comment");
-}
+    "
+        )
+        .expect("failed to insert comment");
+    }
 
     #[allow(overflowing_literals)]
     pub fn generate_code(&mut self, command: VmCommand, comment: bool) {
@@ -101,12 +110,12 @@ impl AsmWriter {
             VmCommand::Function(f, n) => {
                 self.curr_func = f.to_string();
                 asm = func(f, n);
-            },
+            }
             VmCommand::Call(f, n) => {
                 let return_label = format!("{}.ret${}", self.filename, self.call_count);
                 asm = call_func(f, n, return_label);
                 self.call_count += 1;
-            },
+            }
             VmCommand::Return => {
                 if self.return_written {
                     asm = return_func();
@@ -114,7 +123,7 @@ impl AsmWriter {
                     asm = write_return();
                     self.return_written = true;
                 }
-            },
+            }
         };
         write!(self.writer, "{asm}").expect("failed to write command to asm file");
     }
@@ -122,22 +131,26 @@ impl AsmWriter {
 
 // not and neg
 fn arithmetic_one_arg(operator: &str) -> String {
-    format!("\
+    format!(
+        "\
     @SP
     A=M-1
     M={operator}M
-    ")
+    "
+    )
 }
 
 // add, sub, and, or, and start of comparisons
 fn arithmetic_two_args(last_line: &str) -> String {
-    format!("\
+    format!(
+        "\
     @SP
     AM=M-1
     D=M
     A=A-1
     {last_line}
-    ")
+    "
+    )
 }
 
 // eq, gt, lt
@@ -148,8 +161,10 @@ fn comparison(comparison: Comparison, counter: i16) -> String {
         Comparison::GT => "LE",
         Comparison::LT => "GE",
     };
-    
-    arithmetic_two_args("MD=M-D") + &format!("\
+
+    arithmetic_two_args("MD=M-D")
+        + &format!(
+            "\
     @END_COMP{counter}
     D;J{comp_str}
     D=D+1
@@ -157,13 +172,17 @@ fn comparison(comparison: Comparison, counter: i16) -> String {
     @SP
     A=M-1
     M=M-D
-    ")
+    "
+        )
 }
 
 // local, argument, this, that
 pub fn push_segment<T>(segment: T, n: i16) -> String
-where T: Display {
-    format!("\
+where
+    T: Display,
+{
+    format!(
+        "\
     @{n}
     D=A
     @{segment}
@@ -173,11 +192,15 @@ where T: Display {
     M=M+1
     A=M-1
     M=D
-    ")
+    "
+    )
 }
 pub fn pop_segment<T>(segment: T, n: i16) -> String
-where T: Display {
-    format!("\
+where
+    T: Display,
+{
+    format!(
+        "\
     @{n}
     D=A
     @{segment}
@@ -187,56 +210,72 @@ where T: Display {
     D=D+M
     A=D-M
     M=D-A
-    ")
+    "
+    )
 }
 // static, pointer, constant (push only)
 fn push_value<T>(var: T, use_a_over_m: bool) -> String
-where T: Display {
-    let comp_a_or_m = if use_a_over_m {'A'} else {'M'};
-    format!("\
+where
+    T: Display,
+{
+    let comp_a_or_m = if use_a_over_m { 'A' } else { 'M' };
+    format!(
+        "\
     @{var}
     D={comp_a_or_m}
     @SP
     M=M+1
     A=M-1
     M=D
-    ")
+    "
+    )
 }
 
-fn pop_value<T>(var: T) -> String 
-where T: Display {
-    format!("\
+fn pop_value<T>(var: T) -> String
+where
+    T: Display,
+{
+    format!(
+        "\
     @SP
     AM=M-1
     D=M
     @{var}
     M=D
-    ")
+    "
+    )
 }
 
 fn def_label(label: String) -> String {
-    format!("\
+    format!(
+        "\
     ({label})
-    ")
+    "
+    )
 }
 fn goto(label: String) -> String {
-    format!("\
+    format!(
+        "\
     @{label}
     0;JMP
-    ")
+    "
+    )
 }
 fn if_goto(label: String) -> String {
-    format!("\
+    format!(
+        "\
     @SP
     AM=M-1
     D=M
     @{label}
     D;JNE
-    ")
+    "
+    )
 }
 
 fn func(fn_name: &str, n_vars: i16) -> String {
-    format!("\
+    format!(
+        "\
 ({fn_name})
     @{n_vars}
     D=A
@@ -253,7 +292,8 @@ fn func(fn_name: &str, n_vars: i16) -> String {
     @{fn_name}$LocalLoop
     0;JMP
 ({fn_name}$LocalLoopEnd)
-    ")
+    "
+    )
 }
 
 fn call_func(function: &str, n_args: i16, return_label: String) -> String {
@@ -262,8 +302,9 @@ fn call_func(function: &str, n_args: i16, return_label: String) -> String {
     let saved_arg = push_value("ARG", false);
     let saved_this = push_value("THIS", false);
     let saved_that = push_value("THAT", false);
-    
-    format!("\
+
+    format!(
+        "\
     {saved_return_addr}
     {saved_lcl}
     {saved_arg}
@@ -284,18 +325,22 @@ fn call_func(function: &str, n_args: i16, return_label: String) -> String {
     @{function}
     0;JMP
 ({return_label})
-    ")
+    "
+    )
 }
 
 fn return_func() -> String {
-    format!("\
+    String::from(
+        "\
     @$$RETURN
     0;JMP
-    ")
+    ",
+    )
 }
 
 fn write_return() -> String {
-    format!("\
+    String::from(
+        "\
 ($$RETURN)
     @5
     D=A
@@ -345,5 +390,6 @@ fn write_return() -> String {
     @R14
     A=M
     0;JMP
-    ")
+    ",
+    )
 }

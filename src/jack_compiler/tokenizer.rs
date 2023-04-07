@@ -1,4 +1,4 @@
-use crate::jack_compiler::{compilation_engine::CompilationError};
+use crate::jack_compiler::compilation_engine::CompilationError;
 use crate::tokens::jack_tokens::*;
 use std::collections::VecDeque;
 

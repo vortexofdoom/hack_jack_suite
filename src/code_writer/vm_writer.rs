@@ -5,9 +5,9 @@ use std::{
     path::Path,
 };
 
-use crate::tokens::jack_tokens::{Keyword::*, Token};
-use crate::tokens::vm_commands::{VmCommand, Comparison, MemSegment};
 use super::CodeWriter;
+use crate::tokens::jack_tokens::{Keyword::*, Token};
+use crate::tokens::vm_commands::{MemSegment, VmCommand};
 
 #[derive(Default)]
 pub struct VmWriter {

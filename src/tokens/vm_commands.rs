@@ -17,7 +17,7 @@ pub enum VmCommand<'a> {
     // Function
     Function(&'a str, i16),
     Call(&'a str, i16),
-    Return
+    Return,
 }
 
 pub enum MemSegment {
@@ -40,7 +40,7 @@ pub enum Comparison {
 impl std::fmt::Display for Comparison {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Eq => write!(f, "eq"), 
+            Self::Eq => write!(f, "eq"),
             Self::GT => write!(f, "gt"),
             Self::LT => write!(f, "lt"),
         }

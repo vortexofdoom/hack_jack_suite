@@ -1,17 +1,17 @@
+use crate::code_writer::{vm_writer::VmWriter, CodeWriter};
 use crate::jack_compiler::{
     symbol_table::*,
     tokenizer::Tokenizer,
     //xml_writer::XMLWriter,
 };
 use crate::tokens::{
-    vm_commands::{VmCommand, Comparison::*, MemSegment as Mem},
-    token_type::{TokenType, ValidToken},
     jack_tokens::{
         Keyword::{self, *},
         Token,
     },
+    token_type::{TokenType, ValidToken},
+    vm_commands::{Comparison::*, MemSegment as Mem, VmCommand},
 };
-use crate::code_writer::{CodeWriter, vm_writer::VmWriter};
 
 // TODO: Remove when code generation and file writing are separated
 use std::path::PathBuf;

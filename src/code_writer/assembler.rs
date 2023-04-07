@@ -1,38 +1,38 @@
+use anyhow::{anyhow, Result};
+use bitflags::bitflags;
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::fmt::Binary;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::ops::BitOrAssign;
-use once_cell::sync::Lazy;
-use bitflags::bitflags;
-use anyhow::{anyhow, Result};
 
 static BUILTIN_LABELS: Lazy<HashMap<&'static str, u16>> = Lazy::new(|| {
     let mut labels = HashMap::new();
-        labels.insert("SP", 0);
-        labels.insert("LCL", 1);
-        labels.insert("ARG", 2);
-        labels.insert("THIS", 3);
-        labels.insert("THAT", 4);
-        labels.insert("R0", 0);
-        labels.insert("R1", 1);
-        labels.insert("R2", 2);
-        labels.insert("R3", 3);
-        labels.insert("R4", 4);
-        labels.insert("R5", 5);
-        labels.insert("R6", 6);
-        labels.insert("R7", 7);
-        labels.insert("R8", 8);
-        labels.insert("R9", 9);
-        labels.insert("R10", 10);
-        labels.insert("R11", 11);
-        labels.insert("R12", 12);
-        labels.insert("R13", 13);
-        labels.insert("R14", 14);
-        labels.insert("R15", 15);
-        labels.insert("SCREEN", 16384);
-        labels.insert("KBD", 24576);
-        labels
+    labels.insert("SP", 0);
+    labels.insert("LCL", 1);
+    labels.insert("ARG", 2);
+    labels.insert("THIS", 3);
+    labels.insert("THAT", 4);
+    labels.insert("R0", 0);
+    labels.insert("R1", 1);
+    labels.insert("R2", 2);
+    labels.insert("R3", 3);
+    labels.insert("R4", 4);
+    labels.insert("R5", 5);
+    labels.insert("R6", 6);
+    labels.insert("R7", 7);
+    labels.insert("R8", 8);
+    labels.insert("R9", 9);
+    labels.insert("R10", 10);
+    labels.insert("R11", 11);
+    labels.insert("R12", 12);
+    labels.insert("R13", 13);
+    labels.insert("R14", 14);
+    labels.insert("R15", 15);
+    labels.insert("SCREEN", 16384);
+    labels.insert("KBD", 24576);
+    labels
 });
 
 bitflags! {
@@ -49,12 +49,12 @@ bitflags! {
 
         // Control bits
         // These are semantically named based on the ALU chip of the CPU
-        const C_NO        = 1 << 6;
-        const C_F         = 1 << 7;
-        const C_NA        = 1 << 8;
-        const C_ZA        = 1 << 9;
-        const C_ND        = 1 << 10;
-        const C_ZD        = 1 << 11;
+        const C_NO      = 1 << 6;
+        const C_F       = 1 << 7;
+        const C_NA      = 1 << 8;
+        const C_ZA      = 1 << 9;
+        const C_ND      = 1 << 10;
+        const C_ZD      = 1 << 11;
         const ADDR      = 1 << 12;  // A as Address vs value (M vs A)
 
         // C instruction bits
@@ -69,64 +69,64 @@ bitflags! {
         const JGE       = 0b011;    // Jump if greater than or equal to
         const JNE       = 0b101;    // Jump if not equal to
         const JLE       = 0b110;    // Jump if less than or equal to
-        const JMP       = 0b111;    // Unconditional Jump        
+        const JMP       = 0b111;    // Unconditional Jump
         const DEST_MD   = 0b011 << 3;
         const DEST_AM   = 0b101 << 3;
         const DEST_AD   = 0b110 << 3;
         const DEST_AMD  = 0b111 << 3;
-        
+
         // Relevant c-bit combinations for the assembly language. Comments are how they literally resolve into ALU output
         const C_BITS    = Self::C_NO.bits() | Self::C_F.bits() | Self::C_NA.bits() | Self::C_ZA.bits() | Self::C_ND.bits() | Self::C_ZD.bits();
-        
+
         // Probably gonna use the enum solution
         // 0 + 0      => 0
-        //const CTRL_0         = Self::F.bits() | Self::ZA.bits() | Self::ZD.bits();   
-        
+        //const CTRL_0         = Self::F.bits() | Self::ZA.bits() | Self::ZD.bits();
+
         // !(-1 + -1) => 1
-        
+
         // // -1 + 0     => -1
         // const CTRL_NEG_1     = Self::CTRL_0.bits() | Self::ND.bits();
-        
+
         // // D & -1     => D
         // const CTRL_D         = Self::NA.bits() | Self::ZA.bits();
-        
+
         // // -1 & AM    => A
         // const CTRL_A        = Self::ND.bits() | Self::ZD.bits();
-        
+
         // // !(D & -1)  => !D
         // const CTRL_NOT_D     = Self::CTRL_D.bits() | Self::NO.bits();
-        
+
         // // !(-1 & A)  => !A
         // const CTRL_NOT_A     = Self::CTRL_A.bits() | Self::NO.bits();
-        
+
         // // !(D + -1)  => -D
         // const CTRL_NEG_D     = Self::CTRL_NOT_D.bits() | Self::F.bits();
-        
+
         // // !(-1 + A)  => -A
         // const CTRL_NEG_A     = Self::CTRL_NOT_A.bits() | Self::F.bits();
-        
+
         // // !(!D + -1) => D + 1
         // const CTRL_D_PLUS_1  = Self::C_BITS.bits() & !Self::ZD.bits();
-        
+
         // // !(-1 + !A) => A + 1
         // const CTRL_A_PLUS_1  = Self::C_BITS.bits() & !Self::ZA.bits();
-        
+
         // // (D + -1)     => (D - 1)
         // const CTRL_D_MINUS_1 = Self::F.bits() | Self::NA.bits() | Self::ZA.bits();
-        
+
         // // (-1 + A)     => (A - 1)
         // const CTRL_A_MINUS_1 = Self::F.bits() | Self::ND.bits() | Self::ZD.bits();
-        
+
         // // !(!D + A)  => (D - A)
         // const CTRL_D_SUB_A   = Self::ND.bits() | Self::F.bits() | Self::NO.bits();
-        
+
         // // !(D + !A)  => (A - D)
         // const CTRL_A_SUB_D   = Self::NO.bits() | Self::F.bits() | Self::NA.bits();
-        
+
         // // !(!D & !A) => (D | A)
         // const CTRL_D_OR_A    = Self::NO.bits() | Self::NA.bits() | Self::ND.bits();
 
-        // // 
+        // //
         // const CMP_M         = Self::CMP_A.bits() | Self::ADDR.bits();
         // const CMP_NOT_M     = Self::CMP_NOT_A.bits() | Self::ADDR.bits();
         // const CMP_NEG_M     = Self::CMP_NEG_A.bits() | Self::ADDR.bits();
@@ -165,50 +165,54 @@ impl ToString for AsmFlags {
             _ => "",
         };
 
-        format!("{dest}{}{jump}", Ctrl::try_from(self).expect("All valid bit configurations mapped"))
+        format!(
+            "{dest}{}{jump}",
+            Ctrl::try_from(self).expect("All valid bit configurations mapped")
+        )
     }
 }
 
+#[rustfmt::skip]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i16)]
 pub enum Ctrl {
-    Zero    = 0b__101010 << 6,
-    One     = 0b__111111 << 6,
-    NegOne  = 0b__111010 << 6,
-    D       = 0b__001100 << 6,
-    A       = 0b__110000 << 6,
+    Zero    = 0b0_101010 << 6,
+    One     = 0b0_111111 << 6,
+    NegOne  = 0b0_111010 << 6,
+    D       = 0b0_001100 << 6,
+    A       = 0b0_110000 << 6,
     M       = 0b1_110000 << 6,
-    NotD    = 0b__001101 << 6,
-    NotA    = 0b__110001 << 6,
+    NotD    = 0b0_001101 << 6,
+    NotA    = 0b0_110001 << 6,
     NotM    = 0b1_110001 << 6,
-    NegD    = 0b__001111 << 6,
-    NegA    = 0b__110011 << 6,
+    NegD    = 0b0_001111 << 6,
+    NegA    = 0b0_110011 << 6,
     NegM    = 0b1_110011 << 6,
-    DPlus1  = 0b__011111 << 6,
-    APlus1  = 0b__110111 << 6,
+    DPlus1  = 0b0_011111 << 6,
+    APlus1  = 0b0_110111 << 6,
     MPlus1  = 0b1_110111 << 6,
-    DMinus1 = 0b__001110 << 6,
-    AMinus1 = 0b__110010 << 6, 
+    DMinus1 = 0b0_001110 << 6,
+    AMinus1 = 0b0_110010 << 6,
     MMinus1 = 0b1_110010 << 6,
-    DPlusA  = 0b__000010 << 6,
+    DPlusA  = 0b0_000010 << 6,
     DPlusM  = 0b1_000010 << 6,
-    DMinusA = 0b__010011 << 6,
+    DMinusA = 0b0_010011 << 6,
     DMinusM = 0b1_010011 << 6,
-    AMinusD = 0b__000111 << 6,
+    AMinusD = 0b0_000111 << 6,
     MMinusD = 0b1_000111 << 6,
-    DAndA   = 0b__000000 << 6, // lol
+    DAndA   = 0b0_000000 << 6, // lol
     DAndM   = 0b1_000000 << 6,
-    DOrA    = 0b__010101 << 6,
+    DOrA    = 0b0_010101 << 6,
     DOrM    = 0b1_010101 << 6,
 }
 
-// might be able to just add all the variants eventually and implement From<i16> instead
+// might be able to just add all the variants eventually and implement From<AsmFlags> instead
 impl TryFrom<&AsmFlags> for Ctrl {
     type Error = ();
     fn try_from(value: &AsmFlags) -> std::result::Result<Self, Self::Error> {
-        let bits  = (value.bits >> 6) & 0b1111111;
-        let bit_7 = bits & 0 << 7 == bits;
-        match (bits & 0 << 7, bits >> 6 == 0) {
+        let bits = (value.bits >> 6) & 0b1111111;
+        //let bit_7 = bits & 0 << 7 == bits;
+        match (bits & 0b111111, bits >> 6 == 0) {
             // official opcodes
             (0b101010, _) => Ok(Self::Zero),
             (0b111111, _) => Ok(Self::One),
@@ -226,7 +230,7 @@ impl TryFrom<&AsmFlags> for Ctrl {
             (0b110111, true) => Ok(Self::APlus1),
             (0b110111, false) => Ok(Self::MPlus1),
             (0b001110, _) => Ok(Self::DMinus1),
-            (0b110010, true) => Ok(Self::AMinus1), 
+            (0b110010, true) => Ok(Self::AMinus1),
             (0b110010, false) => Ok(Self::MMinus1),
             (0b000010, true) => Ok(Self::DPlusA),
             (0b000010, false) => Ok(Self::DPlusM),
@@ -239,12 +243,18 @@ impl TryFrom<&AsmFlags> for Ctrl {
             (0b010101, true) => Ok(Self::DOrA),
             (0b010101, false) => Ok(Self::DOrM),
             // Unofficial
-            (_c @ (0b111011 | 0b001000 | 0b011000 | 0b100000 | 0b100100 
-            | 0b101000 | 0b101100 | 0b101111 | 0b111000 | 0b111101), _) => Ok(Self::Zero),
-            (_c @ (0b001001 | 0b011001 | 0b100001 | 0b100101 | 0b101001
-            | 0b101011 | 0b101101 | 0b101110 | 0b111001 | 0b111100), _) => Ok(Self::NegOne),
+            (
+                _c @ (0b111011 | 0b001000 | 0b011000 | 0b100000 | 0b100100 | 0b101000 | 0b101100
+                | 0b101111 | 0b111000 | 0b111101),
+                _,
+            ) => Ok(Self::Zero),
+            (
+                _c @ (0b001001 | 0b011001 | 0b100001 | 0b100101 | 0b101001 | 0b101011 | 0b101101
+                | 0b101110 | 0b111001 | 0b111100),
+                _,
+            ) => Ok(Self::NegOne),
             (_c @ (0b001010 | 0b011011 | 0b011101), _) => Ok(Self::D),
-            (_c @ (0b100010 | 0b100111 | 0b110101), true) => Ok(Self::A), 
+            (_c @ (0b100010 | 0b100111 | 0b110101), true) => Ok(Self::A),
             (_c @ (0b100010 | 0b100111 | 0b110101), false) => Ok(Self::M),
             (_c @ (0b001011 | 0b011100 | 0b011010), _) => Ok(Self::NotD),
             (_c @ (0b100011 | 0b100110 | 0b110100), true) => Ok(Self::NotA),
@@ -264,7 +274,6 @@ impl BitOrAssign<Ctrl> for AsmFlags {
     fn bitor_assign(&mut self, rhs: Ctrl) {
         *self |= Self::from(rhs)
     }
-
 }
 
 impl std::fmt::Display for Ctrl {
@@ -315,8 +324,8 @@ pub struct Instruction {
 
 impl From<i16> for Instruction {
     fn from(value: i16) -> Self {
-        Self { 
-            inner: AsmFlags { bits: value } 
+        Self {
+            inner: AsmFlags { bits: value },
         }
     }
 }
@@ -324,8 +333,8 @@ impl From<i16> for Instruction {
 impl From<u16> for Instruction {
     #[allow(overflowing_literals)]
     fn from(value: u16) -> Self {
-        Self { 
-            inner: AsmFlags { bits: value as i16 } 
+        Self {
+            inner: AsmFlags { bits: value as i16 },
         }
     }
 }
@@ -336,9 +345,7 @@ impl Binary for Instruction {
     }
 }
 
-impl Instruction {
-    
-}
+impl Instruction {}
 
 pub struct Assembler {
     pub labels: HashMap<String, u16>,
@@ -349,7 +356,7 @@ impl Assembler {
     pub fn new() -> Self {
         Assembler {
             labels: HashMap::new(),
-            var_counter: 15,    // Starts at 15 so we can increment it pre insertion
+            var_counter: 15, // Starts at 15 so we can increment it pre insertion
         }
     }
 
@@ -384,7 +391,8 @@ impl Assembler {
                     Ok(Instruction::from(addr))
                 } else {
                     self.var_counter += 1;
-                    self.labels.insert(String::from(&input[1..]), self.var_counter);
+                    self.labels
+                        .insert(String::from(&input[1..]), self.var_counter);
                     Ok(Instruction::from(self.var_counter))
                 }
             }
@@ -393,21 +401,23 @@ impl Assembler {
 
     fn parse_c_instruction(&self, input: &str) -> Result<Instruction> {
         let mut inst = AsmFlags::default();
-        
+
         // There will always be a computation field, so we set the bounds now
         let mut comp_start = 0;
         let mut comp_end = input.len();
 
         // All valid commands with a destination field include '='
         // Technically this current implementation allows including valid destinations in a non-standard order.
-        if let Some(i) = input.find("=") {
+        if let Some(i) = input.find('=') {
             // we know the start of the computation field comes immediately after the '='
             comp_start = i + 1;
             let dest = &input[..i];
 
             // Making sure that only valid destinations are used.
             if !dest.chars().all(|c| "AMD".contains(c)) {
-                return Err(anyhow!("'{dest}' contains an invalid destination character."));
+                return Err(anyhow!(
+                    "'{dest}' contains an invalid destination character."
+                ));
             }
 
             // Allowing the destinations in any order might be too permissive, but it's fine for now
@@ -416,9 +426,9 @@ impl Assembler {
             inst.set(AsmFlags::DEST_M, dest.contains('M'));
         }
         // JUMP
-        if let Some(i) = input.find(";") {
+        if let Some(i) = input.find(';') {
             comp_end = i;
-            let jump = &input[i+1..];
+            let jump = &input[i + 1..];
             match jump {
                 "JGT" => inst |= AsmFlags::JGT,
                 "JEQ" => inst |= AsmFlags::JEQ,
@@ -427,7 +437,7 @@ impl Assembler {
                 "JNE" => inst |= AsmFlags::JNE,
                 "JLE" => inst |= AsmFlags::JLE,
                 "JMP" => inst |= AsmFlags::JMP,
-                _ => panic!("Semicolon requires a valid jump command!")
+                _ => panic!("Semicolon requires a valid jump command!"),
             }
         }
 
@@ -447,8 +457,8 @@ impl Assembler {
             "-D" => Ctrl::NegD,
             "-A" => Ctrl::NegA,
             "-M" => Ctrl::NegM,
-            "D+1" => Ctrl::DPlus1,            
-            "A+1" => Ctrl::APlus1,            
+            "D+1" => Ctrl::DPlus1,
+            "A+1" => Ctrl::APlus1,
             "M+1" => Ctrl::MPlus1,
             "D-1" => Ctrl::DMinus1,
             "A-1" => Ctrl::AMinus1,
@@ -463,12 +473,12 @@ impl Assembler {
             "D&M" | "M&D" => Ctrl::DAndM,
             "D|A" | "A|D" => Ctrl::DOrA,
             "D|M" | "M|D" => Ctrl::DOrM,
-            _ => return Err(anyhow!("invalid or unsupported computation field"))
+            _ => return Err(anyhow!("invalid or unsupported computation field")),
         };
 
         // if comp == "0" {                    // 0
         //     inst |= Ctrl::Zero;
-        // } else if comp == "1" { 
+        // } else if comp == "1" {
         //     inst |= Ctrl::One;
         // } else if comp == "-1" {            // -1
         //     inst |= Ctrl::NegOne;
@@ -510,10 +520,9 @@ impl Assembler {
     }
 
     pub fn translate(&mut self, input: &str) -> Result<Instruction> {
-        let mut inst = AsmFlags::default();
         // A or C instruction
-        if input.starts_with('@') {
-            self.parse_a_instruction(&input[1..])
+        if let Some(i) = input.strip_prefix('@') {
+            self.parse_a_instruction(i)
         } else {
             self.parse_c_instruction(input)
         }
@@ -523,17 +532,18 @@ impl Assembler {
         // first pass
         let mut line: u16 = 0;
         for com in asm {
-            if let (Some('('), Some(')')) = (com.chars().nth(0), com.chars().nth_back(0)) {
+            if let (Some('('), Some(')')) = (com.chars().next(), com.chars().next_back()) {
                 //println!("{com}");
-                self.labels.insert(String::from(&com[1..com.len() - 1]), line);
+                self.labels
+                    .insert(String::from(&com[1..com.len() - 1]), line);
             } else {
                 line += 1;
             }
         }
         Ok(asm
             .iter()
-            .filter(|&c| !c.contains("("))
-            .map(|c| self.translate(&c).expect("valid asm only"))
+            .filter(|&c| !c.contains('('))
+            .map(|c| self.translate(c).expect("valid asm only"))
             .collect())
     }
 }
@@ -545,18 +555,16 @@ fn write_bin() {
     let mut assembler = Assembler::new();
     if let Ok(f) = File::open(filename) {
         let reader = BufReader::new(f);
-        for line in reader.lines() {
-            if let Ok(s) = line {
-                let cmd = strip_line(&s);
-                if !cmd.is_empty() {
-                    asm.push(cmd);
-                }
+        for line in reader.lines().flatten() {
+            let cmd = strip_line(&line);
+            if !cmd.is_empty() {
+                asm.push(cmd);
             }
         }
     }
     let bin = assembler.assemble(&asm).unwrap();
     for b in bin {
-        println!("{}", format!("{b:016b}"));
+        println!("{b:016b}");
     }
 }
 
@@ -565,8 +573,5 @@ fn strip_line(input: &str) -> String {
         .find("//")
         .map(|i| &input[..i])
         .unwrap_or(input)
-        .replace(" ", "")
+        .replace(' ', "")
 }
-
-
- 
