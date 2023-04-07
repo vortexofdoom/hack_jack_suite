@@ -1,4 +1,4 @@
-use crate::{VmCommand, Comparison, MemSegment};
+use crate::vm_translator::{VmCommand, Comparison, MemSegment};
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufWriter, Write};

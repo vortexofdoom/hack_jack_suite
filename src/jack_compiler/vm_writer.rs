@@ -5,7 +5,7 @@ use std::{
     path::Path,
 };
 
-use crate::tokens::{Keyword::*, Token};
+use crate::jack_compiler::tokens::{Keyword::*, Token};
 
 // Same as VMTranslator enum
 // Someday I want to combine the Compiler/VM Translator/Assembler

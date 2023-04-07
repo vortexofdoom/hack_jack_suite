@@ -5,7 +5,7 @@ use std::{
     path::Path,
 };
 
-use crate::vm_writer::CodeWriter;
+use crate::jack_compiler::vm_writer::CodeWriter;
 
 #[derive(Default)]
 pub struct XMLWriter {

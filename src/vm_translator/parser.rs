@@ -1,4 +1,4 @@
-use crate::{VmCommand, Comparison::{Eq, GT, LT}, MemSegment};
+use crate::vm_translator::{VmCommand, Comparison::{Eq, GT, LT}, MemSegment};
 
 pub fn parse(cmd: &str) -> Result<VmCommand, String> {
     //asm.push(code_writer::comment(cmd)); // comment with original vm command, stored separately so it can be skipped

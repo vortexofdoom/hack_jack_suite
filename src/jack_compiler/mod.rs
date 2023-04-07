@@ -1,9 +1,6 @@
 use compilation_engine::CompilationEngine;
 use std::path::{Path, PathBuf};
 
-#[macro_use]
-extern crate lazy_static;
-
 mod compilation_engine;
 mod symbol_table;
 mod token_type;

@@ -1,4 +1,4 @@
-use crate::{
+use crate::jack_compiler::{
     symbol_table::*,
     token_type::{TokenType, ValidToken},
     tokenizer::Tokenizer,
@@ -30,7 +30,7 @@ pub enum CompilationError {
     UnexpectedEndofTokens,
 }
 
-use crate::token_type::TokenType::*;
+use crate::jack_compiler::token_type::TokenType::*;
 impl CompilationEngine {
     pub fn new() -> Self {
         CompilationEngine {

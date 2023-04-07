@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-use crate::tokens::{
+use crate::jack_compiler::tokens::{
     Keyword::{self, *},
     Token,
 };
