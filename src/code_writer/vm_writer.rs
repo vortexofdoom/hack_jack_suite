@@ -68,7 +68,7 @@ impl VmWriter {
                     self.write(VmCommand::Call("String.appendChar", 2));
                 }
             }
-            _ => { /*only passing constants*/ }
+            _ => unreachable!("only passing constants"),
         }
     }
 }

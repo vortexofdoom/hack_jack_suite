@@ -6,12 +6,6 @@ use crate::tokens::jack_tokens::{
 };
 
 pub trait ValidToken: Display + Debug + PartialEq<TokenType> {}
-
-impl PartialEq<TokenType> for Box<dyn ValidToken> {
-    fn eq(&self, other: &TokenType) -> bool {
-        self.as_ref() == other
-    }
-}
 impl ValidToken for Token {}
 impl ValidToken for Keyword {}
 impl ValidToken for char {}

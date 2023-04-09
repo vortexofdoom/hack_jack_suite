@@ -16,18 +16,17 @@ pub struct Tokenizer {
 
 impl Tokenizer {
     pub fn new(file: String) -> Self {
-        let tknzr = Tokenizer {
+        Tokenizer {
             chars: file.trim().chars().collect(),
             errors: vec![],
-        };
-        tknzr
+        }
     }
 
     // Called when we have already seen a '/'
     // So we only care if the very next character is '/' or '*'
     // Advances to the next character after the comment before returning true
     // Otherwise returns false
-    fn is_comment(&mut self) -> bool {
+    fn advance_past_comment(&mut self) -> bool {
         match self.chars.get(0) {
             Some('*') => {
                 while let Some(c) = self.chars.pop_front() {
@@ -71,7 +70,7 @@ impl Tokenizer {
                     '"' => self.get_string(),
                     // Symbols
                     _ => {
-                        if c == '/' && self.is_comment() {
+                        if c == '/' && self.advance_past_comment() {
                             self.advance()
                         } else {
                             Some(Token::Symbol(c))

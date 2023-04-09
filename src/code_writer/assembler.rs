@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::fmt::Binary;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::ops::BitOrAssign;
 
 static BUILTIN_LABELS: Lazy<HashMap<&'static str, u16>> = Lazy::new(|| {
     let mut labels = HashMap::new();
@@ -75,63 +74,8 @@ bitflags! {
         const DEST_AD   = 0b110 << 3;
         const DEST_AMD  = 0b111 << 3;
 
-        // Relevant c-bit combinations for the assembly language. Comments are how they literally resolve into ALU output
+        // All C bits
         const C_BITS    = Self::C_NO.bits() | Self::C_F.bits() | Self::C_NA.bits() | Self::C_ZA.bits() | Self::C_ND.bits() | Self::C_ZD.bits();
-
-        // Probably gonna use the enum solution
-        // 0 + 0      => 0
-        //const CTRL_0         = Self::F.bits() | Self::ZA.bits() | Self::ZD.bits();
-
-        // !(-1 + -1) => 1
-
-        // // -1 + 0     => -1
-        // const CTRL_NEG_1     = Self::CTRL_0.bits() | Self::ND.bits();
-
-        // // D & -1     => D
-        // const CTRL_D         = Self::NA.bits() | Self::ZA.bits();
-
-        // // -1 & AM    => A
-        // const CTRL_A        = Self::ND.bits() | Self::ZD.bits();
-
-        // // !(D & -1)  => !D
-        // const CTRL_NOT_D     = Self::CTRL_D.bits() | Self::NO.bits();
-
-        // // !(-1 & A)  => !A
-        // const CTRL_NOT_A     = Self::CTRL_A.bits() | Self::NO.bits();
-
-        // // !(D + -1)  => -D
-        // const CTRL_NEG_D     = Self::CTRL_NOT_D.bits() | Self::F.bits();
-
-        // // !(-1 + A)  => -A
-        // const CTRL_NEG_A     = Self::CTRL_NOT_A.bits() | Self::F.bits();
-
-        // // !(!D + -1) => D + 1
-        // const CTRL_D_PLUS_1  = Self::C_BITS.bits() & !Self::ZD.bits();
-
-        // // !(-1 + !A) => A + 1
-        // const CTRL_A_PLUS_1  = Self::C_BITS.bits() & !Self::ZA.bits();
-
-        // // (D + -1)     => (D - 1)
-        // const CTRL_D_MINUS_1 = Self::F.bits() | Self::NA.bits() | Self::ZA.bits();
-
-        // // (-1 + A)     => (A - 1)
-        // const CTRL_A_MINUS_1 = Self::F.bits() | Self::ND.bits() | Self::ZD.bits();
-
-        // // !(!D + A)  => (D - A)
-        // const CTRL_D_SUB_A   = Self::ND.bits() | Self::F.bits() | Self::NO.bits();
-
-        // // !(D + !A)  => (A - D)
-        // const CTRL_A_SUB_D   = Self::NO.bits() | Self::F.bits() | Self::NA.bits();
-
-        // // !(!D & !A) => (D | A)
-        // const CTRL_D_OR_A    = Self::NO.bits() | Self::NA.bits() | Self::ND.bits();
-
-        // //
-        // const CMP_M         = Self::CMP_A.bits() | Self::ADDR.bits();
-        // const CMP_NOT_M     = Self::CMP_NOT_A.bits() | Self::ADDR.bits();
-        // const CMP_NEG_M     = Self::CMP_NEG_A.bits() | Self::ADDR.bits();
-        // const CMP_M_PLUS_1  = Self::CMP_A_PLUS_1.bits() | Self::ADDR.bits();
-        // const CMP_M_MINUS_1 = Self::CMP_
     }
 }
 
@@ -167,7 +111,7 @@ impl ToString for AsmFlags {
 
         format!(
             "{dest}{}{jump}",
-            Ctrl::try_from(self).expect("All valid bit configurations mapped")
+            CBits::try_from(self).expect("All valid bit configurations mapped")
         )
     }
 }
@@ -175,7 +119,8 @@ impl ToString for AsmFlags {
 #[rustfmt::skip]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i16)]
-pub enum Ctrl {
+/// An enum to provide an exhaustive list of supported `c` bit configurations without exposing intermediate constants
+pub enum CBits {
     Zero    = 0b0_101010 << 6,
     One     = 0b0_111111 << 6,
     NegOne  = 0b0_111010 << 6,
@@ -207,8 +152,8 @@ pub enum Ctrl {
 }
 
 // might be able to just add all the variants eventually and implement From<AsmFlags> instead
-impl TryFrom<&AsmFlags> for Ctrl {
-    type Error = ();
+impl TryFrom<&AsmFlags> for CBits {
+    type Error = anyhow::Error;
     fn try_from(value: &AsmFlags) -> std::result::Result<Self, Self::Error> {
         let bits = (value.bits >> 6) & 0b1111111;
         //let bit_7 = bits & 0 << 7 == bits;
@@ -259,54 +204,55 @@ impl TryFrom<&AsmFlags> for Ctrl {
             (_c @ (0b001011 | 0b011100 | 0b011010), _) => Ok(Self::NotD),
             (_c @ (0b100011 | 0b100110 | 0b110100), true) => Ok(Self::NotA),
             (_c @ (0b100011 | 0b100110 | 0b110100), false) => Ok(Self::NotM),
-            _ => todo!("implement unofficial instructions"),
+            _ => Err(anyhow!("unsupported bit configuration")),
         }
     }
 }
 
-impl From<Ctrl> for AsmFlags {
-    fn from(value: Ctrl) -> Self {
+impl TryFrom<AsmFlags> for CBits {
+    type Error = anyhow::Error;
+    fn try_from(value: AsmFlags) -> std::result::Result<Self, Self::Error> {
+        Self::try_from(&value)
+    }
+}
+
+impl From<CBits> for AsmFlags {
+    fn from(value: CBits) -> Self {
         Self { bits: value as i16 }
     }
 }
 
-impl BitOrAssign<Ctrl> for AsmFlags {
-    fn bitor_assign(&mut self, rhs: Ctrl) {
-        *self |= Self::from(rhs)
-    }
-}
-
-impl std::fmt::Display for Ctrl {
+impl std::fmt::Display for CBits {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
-            Ctrl::Zero => "0",
-            Ctrl::One => "1",
-            Ctrl::NegOne => "-1",
-            Ctrl::D => "D",
-            Ctrl::A => "A",
-            Ctrl::M => "M",
-            Ctrl::NotD => "!D",
-            Ctrl::NotA => "!A",
-            Ctrl::NotM => "!M",
-            Ctrl::NegD => "-D",
-            Ctrl::NegA => "-A",
-            Ctrl::NegM => "-M",
-            Ctrl::DPlus1 => "D+1",
-            Ctrl::APlus1 => "A+1",
-            Ctrl::MPlus1 => "M+1",
-            Ctrl::DMinus1 => "D-1",
-            Ctrl::AMinus1 => "A-1",
-            Ctrl::MMinus1 => "M-1",
-            Ctrl::DPlusA => "D+A",
-            Ctrl::DPlusM => "D+M",
-            Ctrl::DMinusA => "D-A",
-            Ctrl::DMinusM => "D-M",
-            Ctrl::AMinusD => "A-D",
-            Ctrl::MMinusD => "M-D",
-            Ctrl::DAndA => "D&A",
-            Ctrl::DAndM => "D&M",
-            Ctrl::DOrA => "D|A",
-            Ctrl::DOrM => "D|M",
+            CBits::Zero => "0",
+            CBits::One => "1",
+            CBits::NegOne => "-1",
+            CBits::D => "D",
+            CBits::A => "A",
+            CBits::M => "M",
+            CBits::NotD => "!D",
+            CBits::NotA => "!A",
+            CBits::NotM => "!M",
+            CBits::NegD => "-D",
+            CBits::NegA => "-A",
+            CBits::NegM => "-M",
+            CBits::DPlus1 => "D+1",
+            CBits::APlus1 => "A+1",
+            CBits::MPlus1 => "M+1",
+            CBits::DMinus1 => "D-1",
+            CBits::AMinus1 => "A-1",
+            CBits::MMinus1 => "M-1",
+            CBits::DPlusA => "D+A",
+            CBits::DPlusM => "D+M",
+            CBits::DMinusA => "D-A",
+            CBits::DMinusM => "D-M",
+            CBits::AMinusD => "A-D",
+            CBits::MMinusD => "M-D",
+            CBits::DAndA => "D&A",
+            CBits::DAndM => "D&M",
+            CBits::DOrA => "D|A",
+            CBits::DOrM => "D|M",
         };
         write!(f, "{str}")
     }
@@ -345,7 +291,11 @@ impl Binary for Instruction {
     }
 }
 
-impl Instruction {}
+impl Instruction {
+    pub fn is_c_instr(&self) -> bool {
+        self.inner.contains(AsmFlags::C)
+    }
+}
 
 pub struct Assembler {
     pub labels: HashMap<String, u16>,
@@ -371,28 +321,17 @@ impl Assembler {
         }
     }
 
-    // fn insert_label(&mut self, label: &str, addr: u16) -> Option<u16> {
-    //     self.labels.insert(String::from(label), addr)
-    // }
-
-    // fn insert_var(&mut self, label: &str) -> Option<u16> {
-    //     let result = self.labels.insert(String::from(label), self.var_counter);
-    //     self.var_counter += 1;
-    //     result
-    // }
-
     fn parse_a_instruction(&mut self, input: &str) -> Result<Instruction> {
-        match input.parse::<u16>() {
-            Ok(n) if n < i16::MAX as u16 => Ok(Instruction::from(n)),
+        match input.parse::<i16>() {
+            Ok(n) if n >= 0 => Ok(Instruction::from(n)),
             // If the address given is not a valid positive signed 16-bit integer, interpret it as a variable
-            // Could also return an error
+            // Could also return an error, But I think most written assembly would not have intentionally numericized labels
             _ => {
-                if let Some(&addr) = self.labels.get(&input[1..]) {
+                if let Some(&addr) = self.get_label(input) {
                     Ok(Instruction::from(addr))
                 } else {
                     self.var_counter += 1;
-                    self.labels
-                        .insert(String::from(&input[1..]), self.var_counter);
+                    self.labels.insert(String::from(input), self.var_counter);
                     Ok(Instruction::from(self.var_counter))
                 }
             }
@@ -406,8 +345,9 @@ impl Assembler {
         let mut comp_start = 0;
         let mut comp_end = input.len();
 
+        // DEST
         // All valid commands with a destination field include '='
-        // Technically this current implementation allows including valid destinations in a non-standard order.
+        // Technically this current implementation allows including valid destinations in a non-standard order
         if let Some(i) = input.find('=') {
             // we know the start of the computation field comes immediately after the '='
             comp_start = i + 1;
@@ -421,10 +361,11 @@ impl Assembler {
             }
 
             // Allowing the destinations in any order might be too permissive, but it's fine for now
-            inst.set(AsmFlags::DEST_D, dest.contains('D'));
             inst.set(AsmFlags::DEST_A, dest.contains('A'));
             inst.set(AsmFlags::DEST_M, dest.contains('M'));
+            inst.set(AsmFlags::DEST_D, dest.contains('D'));
         }
+
         // JUMP
         if let Some(i) = input.find(';') {
             comp_end = i;
@@ -445,77 +386,44 @@ impl Assembler {
         // RIP glorious messy control flow
         // You were too clever, too permissive, and too unreadable.
         inst |= match &input[comp_start..comp_end] {
-            "0" => Ctrl::Zero,
-            "1" => Ctrl::One,
-            "-1" => Ctrl::NegOne,
-            "D" => Ctrl::D,
-            "A" => Ctrl::A,
-            "M" => Ctrl::M,
-            "!D" => Ctrl::NotD,
-            "!A" => Ctrl::NotA,
-            "!M" => Ctrl::NotM,
-            "-D" => Ctrl::NegD,
-            "-A" => Ctrl::NegA,
-            "-M" => Ctrl::NegM,
-            "D+1" => Ctrl::DPlus1,
-            "A+1" => Ctrl::APlus1,
-            "M+1" => Ctrl::MPlus1,
-            "D-1" => Ctrl::DMinus1,
-            "A-1" => Ctrl::AMinus1,
-            "M-1" => Ctrl::MMinus1,
-            "D+A" | "A+D" => Ctrl::DPlusA,
-            "D+M" | "M+D" => Ctrl::DPlusM,
-            "D-A" => Ctrl::DMinusA,
-            "D-M" => Ctrl::DMinusM,
-            "A-D" => Ctrl::AMinusD,
-            "M-D" => Ctrl::MMinusD,
-            "D&A" | "A&D" => Ctrl::DAndA,
-            "D&M" | "M&D" => Ctrl::DAndM,
-            "D|A" | "A|D" => Ctrl::DOrA,
-            "D|M" | "M|D" => Ctrl::DOrM,
+            "0" => AsmFlags::from(CBits::Zero),
+            "1" => AsmFlags::from(CBits::One),
+            "-1" => AsmFlags::from(CBits::NegOne),
+            "D" => AsmFlags::from(CBits::D),
+            "A" => AsmFlags::from(CBits::A),
+            "M" => AsmFlags::from(CBits::M),
+            "!D" => AsmFlags::from(CBits::NotD),
+            "!A" => AsmFlags::from(CBits::NotA),
+            "!M" => AsmFlags::from(CBits::NotM),
+            // Making the executive decision to allow the real bitwise NOT operator
+            // Especially because it's used instead of ! in the Jack standard
+            "~D" => AsmFlags::from(CBits::NotD),
+            "~A" => AsmFlags::from(CBits::NotA),
+            "~M" => AsmFlags::from(CBits::NotM),
+            // Back to your regularly scheduled standard
+            "-D" => AsmFlags::from(CBits::NegD),
+            "-A" => AsmFlags::from(CBits::NegA),
+            "-M" => AsmFlags::from(CBits::NegM),
+            "D+1" => AsmFlags::from(CBits::DPlus1),
+            "A+1" => AsmFlags::from(CBits::APlus1),
+            "M+1" => AsmFlags::from(CBits::MPlus1),
+            "D-1" => AsmFlags::from(CBits::DMinus1),
+            "A-1" => AsmFlags::from(CBits::AMinus1),
+            "M-1" => AsmFlags::from(CBits::MMinus1),
+            "D-A" => AsmFlags::from(CBits::DMinusA),
+            "D-M" => AsmFlags::from(CBits::DMinusM),
+            "A-D" => AsmFlags::from(CBits::AMinusD),
+            "M-D" => AsmFlags::from(CBits::MMinusD),
+            // Since all of these are semantically equivalent, as long as it's a perfect match we'll allow either order
+            "D+M" | "M+D" => AsmFlags::from(CBits::DPlusM),
+            "D+A" | "A+D" => AsmFlags::from(CBits::DPlusA),
+            "D&A" | "A&D" => AsmFlags::from(CBits::DAndA),
+            "D&M" | "M&D" => AsmFlags::from(CBits::DAndM),
+            "D|A" | "A|D" => AsmFlags::from(CBits::DOrA),
+            "D|M" | "M|D" => AsmFlags::from(CBits::DOrM),
             _ => return Err(anyhow!("invalid or unsupported computation field")),
         };
 
-        // if comp == "0" {                    // 0
-        //     inst |= Ctrl::Zero;
-        // } else if comp == "1" {
-        //     inst |= Ctrl::One;
-        // } else if comp == "-1" {            // -1
-        //     inst |= Ctrl::NegOne;
-        // } else if comp.len() <= 2 {
-        //     if comp.contains('D') {         // D
-        //         c_bits = 0b001100;
-        //     } else {                        // A / M
-        //         c_bits = 0b110000;
-        //     }
-        //     if comp.contains("!") {         // !D / !A / !M
-        //         c_bits |= 0b000001;
-        //     } else if comp.contains("-") {  // -D / -A / -M
-        //         c_bits |= 0b000011;
-        //     }
-        // } else if comp.contains("+1") {
-        //     c_bits = 0b000111;
-        //     if comp.contains("D") {         // D+1
-        //         c_bits |= 0b011000;
-        //     } else {                        // A+1 / M+1
-        //         c_bits |= 0b110000;
-        //     }
-        // } else if comp.contains("D+") || comp.contains("+D") {     // D+A / D+M
-        //     c_bits = 0b000010;
-        // } else if comp == "D-1" {           // D-1
-        //     c_bits = 0b001110;
-        // } else if comp.contains("-1") {     // A-1 / M-1
-        //     c_bits = 0b110010;
-        // } else if comp.contains("D-") {     // D-A / D-M
-        //     c_bits = 0b010011;
-        // } else if comp.contains("-") {      // A-D / M-D
-        //     c_bits = 0b000111;
-        // } else if comp.contains("&") {      // D&A / D&M
-        //     c_bits = 0b000000;
-        // } else if comp.contains("|") {      // D|A / D|M
-        //     c_bits = 0b010101;
-        // }
-        // inst |= c_bits << 6;
         Ok(Instruction { inner: inst })
     }
 
@@ -532,10 +440,12 @@ impl Assembler {
         // first pass
         let mut line: u16 = 0;
         for com in asm {
-            if let (Some('('), Some(')')) = (com.chars().next(), com.chars().next_back()) {
-                //println!("{com}");
-                self.labels
-                    .insert(String::from(&com[1..com.len() - 1]), line);
+            let mut chars = com.chars();
+            if let (Some('('), Some(')')) = (chars.next(), chars.next_back()) {
+                //println!("({com})");
+                if self.get_label(chars.as_str()).is_none() {
+                    self.labels.insert(chars.collect(), line);
+                }
             } else {
                 line += 1;
             }
@@ -574,4 +484,14 @@ fn strip_line(input: &str) -> String {
         .map(|i| &input[..i])
         .unwrap_or(input)
         .replace(' ', "")
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    #[test]
+    fn valid_c_bits() {
+        let c_bits = CBits::try_from(AsmFlags::C_NO | AsmFlags::C_F | AsmFlags::C_ND).unwrap();
+        assert_eq!(c_bits, CBits::DMinusA);
+    }
 }

@@ -1,23 +1,28 @@
 use crate::tokens::vm_commands::{Comparison, MemSegment, VmCommand};
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{BufReader, BufWriter, Cursor, Write};
 use std::path::Path;
 
 pub struct AsmWriter {
     filename: String,
-    writer: BufWriter<File>,
+    writer: BufWriter<Cursor<Vec<u8>>>,
     curr_func: String,
     comp_count: i16,
     call_count: i16,
     return_written: bool,
 }
 
+struct AsmFile {
+    filename: String,
+    buf: String,
+}
+
 impl AsmWriter {
     pub fn new(filename: &str, bootstrap: bool) -> Self {
-        let output =
-            File::create(Path::new(filename).with_extension("asm")).expect("could not create file");
-        let mut writer = BufWriter::new(output);
+        let mut output = Vec::new();
+        //File::create(Path::new(filename).with_extension("asm")).expect("could not create file");
+        let mut writer = BufWriter::new(Cursor::new(output));
         if bootstrap {
             let call_sys_init = call_func("Sys.init", 0, String::from("Sys.init never returns"));
             write!(
@@ -70,16 +75,16 @@ impl AsmWriter {
         }
         let asm: String;
         match command {
-            VmCommand::Add => asm = arithmetic_two_args("M=D+M"),
-            VmCommand::Sub => asm = arithmetic_two_args("M=M-D"),
-            VmCommand::Neg => asm = arithmetic_one_arg("-"),
+            VmCommand::Add => asm = binary_op("M=D+M"),
+            VmCommand::Sub => asm = binary_op("M=M-D"),
+            VmCommand::Neg => asm = unary_op("-"),
             VmCommand::Compare(comp) => {
                 asm = comparison(comp, self.comp_count);
                 self.comp_count += 1;
             }
-            VmCommand::And => asm = arithmetic_two_args("M=D&M"),
-            VmCommand::Or => asm = arithmetic_two_args("M=D|M"),
-            VmCommand::Not => asm = arithmetic_one_arg("!"),
+            VmCommand::And => asm = binary_op("M=D&M"),
+            VmCommand::Or => asm = binary_op("M=D|M"),
+            VmCommand::Not => asm = unary_op("!"),
             VmCommand::Push(seg, n) => {
                 asm = match seg {
                     MemSegment::Argument => push_segment("ARG", n),
@@ -130,7 +135,7 @@ impl AsmWriter {
 }
 
 // not and neg
-fn arithmetic_one_arg(operator: &str) -> String {
+fn unary_op(operator: &str) -> String {
     format!(
         "\
     @SP
@@ -141,7 +146,7 @@ fn arithmetic_one_arg(operator: &str) -> String {
 }
 
 // add, sub, and, or, and start of comparisons
-fn arithmetic_two_args(last_line: &str) -> String {
+fn binary_op(last_line: &str) -> String {
     format!(
         "\
     @SP
@@ -162,7 +167,7 @@ fn comparison(comparison: Comparison, counter: i16) -> String {
         Comparison::LT => "GE",
     };
 
-    arithmetic_two_args("MD=M-D")
+    binary_op("MD=M-D")
         + &format!(
             "\
     @END_COMP{counter}

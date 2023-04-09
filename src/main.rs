@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 mod code_writer;
 mod cpu;
 mod jack_compiler;
@@ -6,10 +5,29 @@ mod tokens;
 mod vm_translator;
 
 use crate::jack_compiler::compilation_engine::CompilationEngine;
+use clap::{Args, Parser, Subcommand};
 use std::path::{Path, PathBuf};
 
 #[macro_use]
 extern crate lazy_static;
+
+#[derive(Debug, Parser)]
+pub struct ProgArgs {
+    #[clap(subcommand)]
+    pub sub_command: HackArgs,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum HackArgs {
+    Compile(CompileArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct CompileArgs {
+    /// Path to the file to be compiled
+    pub path: PathBuf,
+    pub vm: bool,
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

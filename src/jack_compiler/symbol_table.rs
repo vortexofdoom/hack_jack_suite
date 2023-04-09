@@ -10,6 +10,7 @@ pub enum Kind {
     Arg,
     Var,
 }
+
 impl Display for Kind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {

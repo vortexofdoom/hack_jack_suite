@@ -25,7 +25,7 @@ pub struct CompilationEngine {
     errors: Vec<(CompilationError, Option<Token>)>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum CompilationError {
     DuplicateIdentifier,
     UnexpectedToken,

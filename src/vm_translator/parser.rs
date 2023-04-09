@@ -1,9 +1,11 @@
+use anyhow::{anyhow, Result};
+
 use crate::tokens::vm_commands::{
     Comparison::{Eq, GT, LT},
     MemSegment, VmCommand,
 };
 
-pub fn parse(cmd: &str) -> Result<VmCommand, String> {
+pub fn parse(cmd: &str) -> Result<VmCommand> {
     //asm.push(code_writer::comment(cmd)); // comment with original vm command, stored separately so it can be skipped
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     let command = match parts.len() {
@@ -18,18 +20,18 @@ pub fn parse(cmd: &str) -> Result<VmCommand, String> {
             "or" => VmCommand::Or,
             "not" => VmCommand::Not,
             "return" => VmCommand::Return,
-            _ => return Err(format!("No one word command \"{cmd}\"")),
+            _ => return Err(anyhow!("No one word command \"{cmd}\"")),
         },
         2 => match parts[0] {
             "label" => VmCommand::Label(parts[1]),
             "goto" => VmCommand::Goto(parts[1]),
             "if-goto" => VmCommand::IfGoto(parts[1]),
-            _ => return Err(format!("No two word command \"{cmd}\"")),
+            _ => return Err(anyhow!("No two word command \"{cmd}\"")),
         },
         3 => {
             let arg = parts[2]
                 .parse::<i16>()
-                .map_err(|_| format!("{} is not a valid 16 bit integer", parts[2]))?;
+                .map_err(|_| anyhow!("{} is not a valid 16 bit integer", parts[2]))?;
 
             match (parts[0], parts[1]) {
                 ("push", "local") => VmCommand::Push(MemSegment::Local, arg),
@@ -58,10 +60,10 @@ pub fn parse(cmd: &str) -> Result<VmCommand, String> {
                 ("function", _) => VmCommand::Function(parts[1], arg),
                 ("call", _) => VmCommand::Call(parts[1], arg),
 
-                _ => return Err(format!("No three word command \"{cmd}\"")),
+                _ => return Err(anyhow!("No three word command \"{cmd}\"")),
             }
         }
-        _ => return Err(format!("\"{cmd}\" is not a valid VM command")),
+        _ => return Err(anyhow!("\"{cmd}\" is not a valid VM command")),
     };
     Ok(command)
 }

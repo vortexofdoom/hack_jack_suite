@@ -6,14 +6,12 @@ use std::vec;
 use crate::code_writer::asm_writer::AsmWriter;
 pub mod parser;
 
-fn translate_vm() {
+fn translate_vm(bootstrap: bool) {
     let args: Vec<String> = std::env::args().collect();
     let mut files: Vec<PathBuf> = vec![];
     let file_path = Path::new(&args[1]);
     let filename = file_path.file_stem().unwrap().to_str().unwrap();
-    let mut bootstrap = false;
     if file_path.is_dir() {
-        bootstrap = true;
         for entry in file_path.read_dir().unwrap() {
             if let Some(x) = entry.as_ref().unwrap().path().extension() {
                 if x.to_str().unwrap() == "vm" {
