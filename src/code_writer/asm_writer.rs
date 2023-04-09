@@ -293,9 +293,8 @@ fn func(fn_name: &str, n_vars: i16) -> String {
     @LCL
     A=D+M
     M=0
-    D=D-1
     @{fn_name}$LocalLoop
-    0;JMP
+    D=D-1;JMP
 ({fn_name}$LocalLoopEnd)
     "
     )
