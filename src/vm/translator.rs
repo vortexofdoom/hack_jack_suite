@@ -5,11 +5,74 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::vec;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 
-use super::{parser, Comparison, MemSegment as Seg, VmCommand};
+use super::{Comparison as Cmp, MemSegment as Seg, VmCommand};
 use crate::asm::{Asm, Instruction, Mode};
 use asm_macro::asm;
+
+pub fn parse(cmd: &str) -> Result<VmCommand> {
+    //asm.push(code_writer::comment(cmd)); // comment with original vm command, stored separately so it can be skipped
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    let command = match parts.len() {
+        1 => match parts[0] {
+            "add" => VmCommand::Add,
+            "sub" => VmCommand::Sub,
+            "neg" => VmCommand::Neg,
+            "eq" => VmCommand::Compare(Cmp::Eq),
+            "gt" => VmCommand::Compare(Cmp::GT),
+            "lt" => VmCommand::Compare(Cmp::LT),
+            "and" => VmCommand::And,
+            "or" => VmCommand::Or,
+            "not" => VmCommand::Not,
+            "return" => VmCommand::Return,
+            _ => bail!("No one word command \"{cmd}\""),
+        },
+        2 => match parts[0] {
+            "label" => VmCommand::Label(parts[1]),
+            "goto" => VmCommand::Goto(parts[1]),
+            "if-goto" => VmCommand::IfGoto(parts[1]),
+            _ => bail!("No two word command \"{cmd}\""),
+        },
+        3 => {
+            let arg = parts[2]
+                .parse::<i16>()
+                .map_err(|_| anyhow!("{} is not a valid 16 bit integer", parts[2]))?;
+
+            match (parts[0], parts[1]) {
+                ("push", "local") => VmCommand::Push(Seg::Local, arg),
+                ("pop", "local") => VmCommand::Pop(Seg::Local, arg),
+
+                ("push", "argument") => VmCommand::Push(Seg::Argument, arg),
+                ("pop", "argument") => VmCommand::Pop(Seg::Argument, arg),
+
+                ("push", "this") => VmCommand::Push(Seg::This, arg),
+                ("pop", "this") => VmCommand::Pop(Seg::This, arg),
+
+                ("push", "that") => VmCommand::Push(Seg::That, arg),
+                ("pop", "that") => VmCommand::Pop(Seg::That, arg),
+
+                ("push", "constant") => VmCommand::Push(Seg::Constant, arg),
+
+                ("push", "static") => VmCommand::Push(Seg::Static, arg),
+                ("pop", "static") => VmCommand::Pop(Seg::Static, arg),
+
+                ("push", "pointer") => VmCommand::Push(Seg::Pointer, arg),
+                ("pop", "pointer") => VmCommand::Pop(Seg::Pointer, arg),
+
+                ("push", "temp") => VmCommand::Push(Seg::Temp, arg),
+                ("pop", "temp") => VmCommand::Pop(Seg::Temp, arg),
+
+                ("function", _) => VmCommand::Function(parts[1], arg),
+                ("call", _) => VmCommand::Call(parts[1], arg),
+
+                _ => bail!("No three word command \"{cmd}\""),
+            }
+        }
+        _ => bail!("\"{cmd}\" is not a valid VM command"),
+    };
+    Ok(command)
+}
 
 fn translate_vm(bootstrap: bool) -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -40,7 +103,7 @@ fn translate_vm(bootstrap: bool) -> Result<()> {
                     .trim()
                     .to_string();
                 if !cmd.is_empty() {
-                    let vm_cmd = parser::parse(&cmd).expect("could not parse command");
+                    let vm_cmd = parse(&cmd).expect("could not parse command");
                     writer.generate_asm(vm_cmd, true)?;
                 }
             }
@@ -92,10 +155,10 @@ impl<'a> VmTranslator<'a> {
 
     /// Naively generates assembly on demand per VM Command.
     fn generate_asm(&mut self, command: VmCommand, comment: bool) -> Result<()> {
-        let mut res = vec![];
         if comment {
-            res.push(Asm::Comment(Cow::Owned(format!("{command}"))));
+           self.asm.push(asm!("{command}"));
         }
+        
         match command {
             VmCommand::Add => self.binary_op(asm!(M = D + M)),
             VmCommand::Sub => self.binary_op(asm!(M = M - D)),
@@ -207,7 +270,7 @@ impl<'a> VmTranslator<'a> {
         self.asm.push(last_line);
     }
 
-    fn comparison(&mut self, comparison: Comparison) {
+    fn comparison(&mut self, comparison: Cmp) {
         // making our comp_count into a simple identifier for formatting with the macro more easily
         let counter = self.comp_count;
         self.comp_count += 1;
@@ -219,9 +282,9 @@ impl<'a> VmTranslator<'a> {
             asm!(@"END_COMP{counter}"),
             match comparison {
                 // jumping if comparison is false
-                Comparison::Eq => asm!(D;JNE),
-                Comparison::GT => asm!(D;JLE),
-                Comparison::LT => asm!(D;JGE),
+                Cmp::Eq => asm!(D;JNE),
+                Cmp::GT => asm!(D;JLE),
+                Cmp::LT => asm!(D;JGE),
             },
         ]);
 

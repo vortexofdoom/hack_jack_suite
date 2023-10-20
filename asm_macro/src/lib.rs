@@ -325,7 +325,13 @@ impl From<Asm> for proc_macro2::TokenStream {
                 }
                 HackLabel::Int(i) => quote!(crate::asm::Asm::Asm(Instruction::from(#i))),
             },
-            Asm::Comment(s) => quote!(Asm::Comment(std::borrow::Cow::Borrowed(#s))),
+            Asm::Comment(s) => {
+                if s.value().contains('{') {
+                    quote!(crate::asm::Asm::Comment(std::borrow::Cow::Owned(format!(#s))))
+                } else {
+                    quote!(crate::asm::Asm::Comment(std::borrow::Cow::Borrowed(#s)))
+                }
+            },
             Asm::Label(s) => match s {
                 HackLabel::Str(s) => {
                     if s.contains('{') {
