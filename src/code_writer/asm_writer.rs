@@ -1,8 +1,13 @@
-use crate::tokens::vm_commands::{Comparison, MemSegment, VmCommand};
+use crate::tokens::vm_commands::{Comparison, MemSegment as M, VmCommand};
+use asm_macro::asm;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Cursor, Write};
 use std::path::Path;
+use std::str::FromStr;
+use std::stringify;
+
+use crate::asm::{Asm, Dest, Instruction, Jump, ValidComp};
 
 pub struct AsmWriter {
     filename: String,
@@ -13,10 +18,87 @@ pub struct AsmWriter {
     return_written: bool,
 }
 
-struct AsmFile {
-    filename: String,
-    buf: String,
+enum Mode {
+    A,
+    M,
 }
+
+// const BOOTSTRAP: [Asm; 5] = [
+//     Asm::addr(256),
+//     Asm::c_inst("D=A"),
+//     Asm::SP,
+//     Asm::c_inst("M=D"),
+//     Asm::comment("Call sys.init"),
+// Asm::LCL,
+// Asm::c_inst("D=M"),
+// Asm::SP,
+// Asm::c_inst("M=M+1"),
+// Asm::c_inst("A=M+1"),
+// Asm::c_inst("M=D"),
+//];
+//     Instruction::Asm(Asm::from_bits(256).unwrap()),
+//     Instruction::Asm(())
+//     Asm::from_str("D=A").unwrap(),
+//     Asm::from_bits(0).unwrap(),
+//     Asm::from_str("M=D").unwrap(),
+//     Asm::from_str("@LCL").unwrap(),
+//     Asm::from_str("D=M").unwrap(),
+//     Asm::from_bits(0).unwrap(),
+//     Asm::from_str("M=M+1").unwrap(),
+//     Asm::from_str("A=M-1").unwrap(),
+//     Asm::from_str("M=D").unwrap(),
+
+//     @ARG
+//     Asm::from_str("D=M").unwrap(),
+//     @SP
+//     ("M=M+1").unwrap(),
+//     A=M-1
+//     M=D
+
+//     @THIS
+//     D=M
+//     0
+//     M=M+1
+//     A=M-1
+//     M=D
+
+//     @THAT
+//     D=M
+//     @SP
+//     M=M+1
+//     A=M-1
+//     M=D
+
+//     0
+//     D=A
+//     5
+//     D=D+A
+//     @SP
+//     D=M-D
+//     @ARG
+//     M=D
+//     0
+//     D=M
+//     @LCL
+//     M=D
+//     @Sys.init
+//     0;JMP
+// ];
+
+// struct AsmFile {
+//     filename: String,
+//     buf: String,
+// }
+
+// const BOOTSTRAP: [Asm; 7] = asm![
+//     "Bootstrap code"
+//     @""
+//     @256
+//     D=A
+//     @SP
+//     M=D
+//     "call Sys.init"
+// ];
 
 impl AsmWriter {
     pub fn new(filename: &str, bootstrap: bool) -> Self {
@@ -68,7 +150,7 @@ impl AsmWriter {
         .expect("failed to insert comment");
     }
 
-    #[allow(overflowing_literals)]
+    //#[allow(overflowing_literals)]
     pub fn generate_code(&mut self, command: VmCommand, comment: bool) {
         if comment {
             write!(self.writer, "// {command}").expect("failed to write comment");
@@ -77,35 +159,35 @@ impl AsmWriter {
         match command {
             VmCommand::Add => asm = binary_op("M=D+M"),
             VmCommand::Sub => asm = binary_op("M=M-D"),
-            VmCommand::Neg => asm = unary_op("-"),
+            VmCommand::Neg => asm = unary_op('-'),
             VmCommand::Compare(comp) => {
                 asm = comparison(comp, self.comp_count);
                 self.comp_count += 1;
             }
             VmCommand::And => asm = binary_op("M=D&M"),
             VmCommand::Or => asm = binary_op("M=D|M"),
-            VmCommand::Not => asm = unary_op("!"),
+            VmCommand::Not => asm = unary_op('!'),
             VmCommand::Push(seg, n) => {
                 asm = match seg {
-                    MemSegment::Argument => push_segment("ARG", n),
-                    MemSegment::Local => push_segment("LCL", n),
-                    MemSegment::This => push_segment("THIS", n),
-                    MemSegment::That => push_segment("THAT", n),
-                    MemSegment::Static => push_value(format!("{}.{n}", self.filename), false),
-                    MemSegment::Pointer => push_value(if n == 0 { "THIS" } else { "THAT" }, false), // could probably just change this to n + 3
-                    MemSegment::Temp => push_value(n + 5, false),
-                    MemSegment::Constant => push_value(n, true),
+                    M::Argument => push_segment("ARG", n),
+                    M::Local => push_segment("LCL", n),
+                    M::This => push_segment("THIS", n),
+                    M::That => push_segment("THAT", n),
+                    M::Static => push_value(format!("{}.{n}", self.filename), false),
+                    M::Pointer => push_value(if n == 0 { "THIS" } else { "THAT" }, false), // could probably just change this to n + 3
+                    M::Temp => push_value(n + 5, false),
+                    M::Constant => push_value(n, true),
                 }
             }
             VmCommand::Pop(seg, n) => {
                 asm = match seg {
-                    MemSegment::Argument => pop_segment("ARG", n),
-                    MemSegment::Local => pop_segment("LCL", n),
-                    MemSegment::This => pop_segment("THIS", n),
-                    MemSegment::That => pop_segment("THAT", n),
-                    MemSegment::Static => pop_value(format!("{}.{n}", self.filename)),
-                    MemSegment::Pointer => pop_value(if n == 0 { "THIS" } else { "THAT" }),
-                    MemSegment::Temp => pop_value(n + 5),
+                    M::Argument => pop_segment("ARG", n),
+                    M::Local => pop_segment("LCL", n),
+                    M::This => pop_segment("THIS", n),
+                    M::That => pop_segment("THAT", n),
+                    M::Static => pop_value(format!("{}.{n}", self.filename)),
+                    M::Pointer => pop_value(if n == 0 { "THIS" } else { "THAT" }),
+                    M::Temp => pop_value(n + 5),
                     _ => String::from("cannot pop to constant"),
                 }
             }
@@ -135,7 +217,7 @@ impl AsmWriter {
 }
 
 // not and neg
-fn unary_op(operator: &str) -> String {
+fn unary_op(operator: char) -> String {
     format!(
         "\
     @SP
@@ -166,7 +248,7 @@ fn comparison(comparison: Comparison, counter: i16) -> String {
         Comparison::GT => "LE",
         Comparison::LT => "GE",
     };
-
+    
     binary_op("MD=M-D")
         + &format!(
             "\
@@ -236,6 +318,8 @@ where
     )
 }
 
+fn push_value_<T: Display>(var: T, mode: Mode) {}
+
 fn pop_value<T>(var: T) -> String
 where
     T: Display,
@@ -258,6 +342,7 @@ fn def_label(label: String) -> String {
     "
     )
 }
+
 fn goto(label: String) -> String {
     format!(
         "\
@@ -266,6 +351,7 @@ fn goto(label: String) -> String {
     "
     )
 }
+
 fn if_goto(label: String) -> String {
     format!(
         "\
@@ -345,6 +431,7 @@ fn return_func() -> String {
 fn write_return() -> String {
     String::from(
         "\
+// Shared return subroutine
 ($$RETURN)
     @5
     D=A

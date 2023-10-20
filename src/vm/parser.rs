@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
 
-use crate::tokens::vm_commands::{
+use super::{
     Comparison::{Eq, GT, LT},
-    MemSegment, VmCommand,
+    MemSegment as Seg, VmCommand,
 };
 
 pub fn parse(cmd: &str) -> Result<VmCommand> {
@@ -34,28 +34,28 @@ pub fn parse(cmd: &str) -> Result<VmCommand> {
                 .map_err(|_| anyhow!("{} is not a valid 16 bit integer", parts[2]))?;
 
             match (parts[0], parts[1]) {
-                ("push", "local") => VmCommand::Push(MemSegment::Local, arg),
-                ("pop", "local") => VmCommand::Pop(MemSegment::Local, arg),
+                ("push", "local") => VmCommand::Push(Seg::Local, arg),
+                ("pop", "local") => VmCommand::Pop(Seg::Local, arg),
 
-                ("push", "argument") => VmCommand::Push(MemSegment::Argument, arg),
-                ("pop", "argument") => VmCommand::Pop(MemSegment::Argument, arg),
+                ("push", "argument") => VmCommand::Push(Seg::Argument, arg),
+                ("pop", "argument") => VmCommand::Pop(Seg::Argument, arg),
 
-                ("push", "this") => VmCommand::Push(MemSegment::This, arg),
-                ("pop", "this") => VmCommand::Pop(MemSegment::This, arg),
+                ("push", "this") => VmCommand::Push(Seg::This, arg),
+                ("pop", "this") => VmCommand::Pop(Seg::This, arg),
 
-                ("push", "that") => VmCommand::Push(MemSegment::That, arg),
-                ("pop", "that") => VmCommand::Pop(MemSegment::That, arg),
+                ("push", "that") => VmCommand::Push(Seg::That, arg),
+                ("pop", "that") => VmCommand::Pop(Seg::That, arg),
 
-                ("push", "constant") => VmCommand::Push(MemSegment::Constant, arg),
+                ("push", "constant") => VmCommand::Push(Seg::Constant, arg),
 
-                ("push", "static") => VmCommand::Push(MemSegment::Static, arg),
-                ("pop", "static") => VmCommand::Pop(MemSegment::Static, arg),
+                ("push", "static") => VmCommand::Push(Seg::Static, arg),
+                ("pop", "static") => VmCommand::Pop(Seg::Static, arg),
 
-                ("push", "pointer") => VmCommand::Push(MemSegment::Pointer, arg),
-                ("pop", "pointer") => VmCommand::Pop(MemSegment::Pointer, arg),
+                ("push", "pointer") => VmCommand::Push(Seg::Pointer, arg),
+                ("pop", "pointer") => VmCommand::Pop(Seg::Pointer, arg),
 
-                ("push", "temp") => VmCommand::Push(MemSegment::Temp, arg),
-                ("pop", "temp") => VmCommand::Pop(MemSegment::Temp, arg),
+                ("push", "temp") => VmCommand::Push(Seg::Temp, arg),
+                ("pop", "temp") => VmCommand::Pop(Seg::Temp, arg),
 
                 ("function", _) => VmCommand::Function(parts[1], arg),
                 ("call", _) => VmCommand::Call(parts[1], arg),

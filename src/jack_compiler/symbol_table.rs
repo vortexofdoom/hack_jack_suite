@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use crate::jack_compiler::compilation_engine::CompilationError;
-use crate::tokens::vm_commands::MemSegment;
+use crate::tokens::vm_commands::MemSegment as Seg;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -24,12 +24,12 @@ impl Display for Kind {
 }
 
 impl Kind {
-    pub fn to_mem_seg(self) -> MemSegment {
+    pub fn to_mem_seg(self) -> Seg {
         match self {
-            Kind::Static => MemSegment::Static,
-            Kind::Field => MemSegment::This,
-            Kind::Arg => MemSegment::Argument,
-            Kind::Var => MemSegment::Local,
+            Kind::Static => Seg::Static,
+            Kind::Field => Seg::This,
+            Kind::Arg => Seg::Argument,
+            Kind::Var => Seg::Local,
         }
     }
 }

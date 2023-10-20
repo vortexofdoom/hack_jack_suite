@@ -4,10 +4,18 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+#[lib]
+#path = "src/lib/"
+#crate-type = ["lib", "bin"]
 
 [dependencies]
 lazy_static = "1.4.0"
 anyhow = "1.0.70"
 once_cell = "1.17.1"
-bitflags = "1.3.2"
 clap = { version = "4.2.1", features = ["derive"] }
+itertools = "0.11.0"
+cargo-expand = "1.0.49"
+bitbybit = "1.2.2"
+arbitrary-int = "1.2.6"
+sdl2 = "0.35.2"
+asm_macro = { path = "asm_macro" }

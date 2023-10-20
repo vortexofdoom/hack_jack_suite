@@ -7,7 +7,7 @@ use std::{
 
 use super::CodeWriter;
 use crate::tokens::jack_tokens::{Keyword::*, Token};
-use crate::tokens::vm_commands::{MemSegment, VmCommand};
+use crate::tokens::vm_commands::{MemSegment as Seg, VmCommand};
 
 #[derive(Default)]
 pub struct VmWriter {
@@ -52,19 +52,19 @@ impl VmWriter {
     pub fn write_constant(&mut self, t: Token) {
         match t {
             Token::Keyword(True) => {
-                self.write(VmCommand::Push(MemSegment::Constant, 1));
+                self.write(VmCommand::Push(Seg::Constant, 1));
                 self.write(VmCommand::Neg);
             }
             Token::Keyword(False) | Token::Keyword(Null) => {
-                self.write(VmCommand::Push(MemSegment::Constant, 0))
+                self.write(VmCommand::Push(Seg::Constant, 0))
             }
-            Token::Keyword(This) => self.write(VmCommand::Push(MemSegment::Pointer, 0)),
-            Token::IntConstant(i) => self.write(VmCommand::Push(MemSegment::Constant, i)),
+            Token::Keyword(This) => self.write(VmCommand::Push(Seg::Pointer, 0)),
+            Token::IntConstant(i) => self.write(VmCommand::Push(Seg::Constant, i)),
             Token::StringConstant(s) => {
-                self.write(VmCommand::Push(MemSegment::Constant, s.len() as i16));
+                self.write(VmCommand::Push(Seg::Constant, s.len() as i16));
                 self.write(VmCommand::Call("String.new", 1));
                 for c in s.chars() {
-                    self.write(VmCommand::Push(MemSegment::Constant, c as i16));
+                    self.write(VmCommand::Push(Seg::Constant, c as i16));
                     self.write(VmCommand::Call("String.appendChar", 2));
                 }
             }

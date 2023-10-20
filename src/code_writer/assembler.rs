@@ -1,12 +1,13 @@
 use anyhow::{anyhow, Result};
 use bitflags::bitflags;
+use itertools::Itertools;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::fmt::Binary;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::str::FromStr;
 
-static BUILTIN_LABELS: Lazy<HashMap<&'static str, u16>> = Lazy::new(|| {
+static BUILTIN_LABELS: Lazy<HashMap<&'static str, i16>> = Lazy::new(|| {
     let mut labels = HashMap::new();
     labels.insert("SP", 0);
     labels.insert("LCL", 1);
@@ -35,7 +36,7 @@ static BUILTIN_LABELS: Lazy<HashMap<&'static str, u16>> = Lazy::new(|| {
 });
 
 bitflags! {
-    struct AsmFlags: i16 {
+    pub struct Instruction: i16 {
         // Jump bits
         const JGT       = 1;        // Jump if greater than
         const JEQ       = 1 << 1;   // Jump if equal to
@@ -79,14 +80,129 @@ bitflags! {
     }
 }
 
-impl Default for AsmFlags {
+impl Instruction {
+    /// All Hack C instructions have the 3 most significant bits set
+    pub fn is_c_instr(&self) -> bool {
+        self.contains(Self::C | Self::B1 | Self::B0)
+    }
+
+    pub fn comp(&self) -> Comp {
+        Comp::try_from(self).unwrap()
+    }
+}
+
+impl Default for Instruction {
     fn default() -> Self {
         Self::C | Self::B1 | Self::B0
     }
 }
 
-impl ToString for AsmFlags {
+
+impl FromStr for Instruction {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        if let Some(res) = s.strip_prefix('@').map(|addr| addr.parse::<i16>()) {
+            Ok(Self {
+                bits: res.map_err(|_| anyhow!("{s}"))?,
+            })
+        } else {
+            let mut inst = Instruction::default();
+
+            // There will always be a computation field, so we set the bounds now
+            let mut comp_start = 0;
+            let mut comp_end = s.len();
+
+            // DEST
+            // All valid commands with a destination field include '='
+            // Technically this current implementation allows including valid destinations in a non-standard order
+            if let Some(i) = s.find('=') {
+                // we know the start of the computation field comes immediately after the '='
+                comp_start = i + 1;
+                let dest = &s[..i];
+
+                // Making sure that only valid destinations are used.
+                if !dest.chars().all(|c| "AMD".contains(c)) {
+                    return Err(anyhow!(
+                        "'{dest}' contains an invalid destination character."
+                    ));
+                }
+
+                // Allowing the destinations in any order might be too permissive, but it's fine for now
+                inst.set(Instruction::DEST_A, dest.contains('A'));
+                inst.set(Instruction::DEST_M, dest.contains('M'));
+                inst.set(Instruction::DEST_D, dest.contains('D'));
+            }
+
+            // JUMP
+            if let Some(i) = s.find(';') {
+                comp_end = i;
+                let jump = &s[i + 1..];
+                match jump {
+                    "JGT" => inst |= Instruction::JGT,
+                    "JEQ" => inst |= Instruction::JEQ,
+                    "JGE" => inst |= Instruction::JGE,
+                    "JLT" => inst |= Instruction::JLT,
+                    "JNE" => inst |= Instruction::JNE,
+                    "JLE" => inst |= Instruction::JLE,
+                    "JMP" => inst |= Instruction::JMP,
+                    // The specification technically requires a jump command after a semicolon
+                    // But not including one just means it won't jump, which would essentially be a no-op.
+                    // Erring on the side of caution to improve debugging
+                    _ => return Err(anyhow!("Semicolon requires a valid jump command!")),
+                }
+            }
+
+            // COMP
+            // RIP glorious messy control flow
+            // You were too clever, too permissive, and too unreadable.
+            inst |= match &s[comp_start..comp_end] {
+                "0" => Instruction::from(Comp::Zero),
+                "1" => Instruction::from(Comp::One),
+                "-1" => Instruction::from(Comp::NegOne),
+                "D" => Instruction::from(Comp::D),
+                "A" => Instruction::from(Comp::A),
+                "M" => Instruction::from(Comp::M),
+                // Making the executive decision to allow ~ as a bitwise NOT operator
+                // Especially because it's used instead of ! in the Jack standard
+                "!D" | "~D" => Instruction::from(Comp::NotD),
+                "!A" | "~A" => Instruction::from(Comp::NotA),
+                "!M" | "~M" => Instruction::from(Comp::NotM),
+                // Back to your regularly scheduled standard
+                "-D" => Instruction::from(Comp::NegD),
+                "-A" => Instruction::from(Comp::NegA),
+                "-M" => Instruction::from(Comp::NegM),
+                "D+1" => Instruction::from(Comp::DPlus1),
+                "A+1" => Instruction::from(Comp::APlus1),
+                "M+1" => Instruction::from(Comp::MPlus1),
+                "D-1" => Instruction::from(Comp::DMinus1),
+                "A-1" => Instruction::from(Comp::AMinus1),
+                "M-1" => Instruction::from(Comp::MMinus1),
+                "D-A" => Instruction::from(Comp::DMinusA),
+                "D-M" => Instruction::from(Comp::DMinusM),
+                "A-D" => Instruction::from(Comp::AMinusD),
+                "M-D" => Instruction::from(Comp::MMinusD),
+                // Since all of these are semantically equivalent, as long as it's a perfect match we'll allow either order
+                "D+M" | "M+D" => Instruction::from(Comp::DPlusM),
+                "D+A" | "A+D" => Instruction::from(Comp::DPlusA),
+                "D&A" | "A&D" => Instruction::from(Comp::DAndA),
+                "D&M" | "M&D" => Instruction::from(Comp::DAndM),
+                "D|A" | "A|D" => Instruction::from(Comp::DOrA),
+                "D|M" | "M|D" => Instruction::from(Comp::DOrM),
+                comp => return Err(anyhow!("invalid or unsupported computation field '{comp}'")),
+            };
+
+            Ok(inst)
+        }
+    }
+}
+
+impl ToString for Instruction {
     fn to_string(&self) -> String {
+        if !self.is_c_instr() {
+            return format!("@{}", self.bits);
+        }
+
         let dest = match self.intersection(Self::DEST_AMD) {
             Self::DEST_A => "A=",
             Self::DEST_M => "M=",
@@ -111,7 +227,7 @@ impl ToString for AsmFlags {
 
         format!(
             "{dest}{}{jump}",
-            CBits::try_from(self).expect("All valid bit configurations mapped")
+            Comp::try_from(self).expect("All valid bit configurations mapped")
         )
     }
 }
@@ -120,7 +236,7 @@ impl ToString for AsmFlags {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i16)]
 /// An enum to provide an exhaustive list of supported `c` bit configurations without exposing intermediate constants
-pub enum CBits {
+pub enum Comp {
     Zero    = 0b0_101010 << 6,
     One     = 0b0_111111 << 6,
     NegOne  = 0b0_111010 << 6,
@@ -152,9 +268,9 @@ pub enum CBits {
 }
 
 // might be able to just add all the variants eventually and implement From<AsmFlags> instead
-impl TryFrom<&AsmFlags> for CBits {
+impl TryFrom<&Instruction> for Comp {
     type Error = anyhow::Error;
-    fn try_from(value: &AsmFlags) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &Instruction) -> std::result::Result<Self, Self::Error> {
         let bits = (value.bits >> 6) & 0b1111111;
         //let bit_7 = bits & 0 << 7 == bits;
         match (bits & 0b111111, bits >> 6 == 0) {
@@ -209,97 +325,146 @@ impl TryFrom<&AsmFlags> for CBits {
     }
 }
 
-impl TryFrom<AsmFlags> for CBits {
+impl TryFrom<Instruction> for Comp {
     type Error = anyhow::Error;
-    fn try_from(value: AsmFlags) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: Instruction) -> std::result::Result<Self, Self::Error> {
         Self::try_from(&value)
     }
 }
 
-impl From<CBits> for AsmFlags {
-    fn from(value: CBits) -> Self {
+impl From<Comp> for Instruction {
+    fn from(value: Comp) -> Self {
         Self { bits: value as i16 }
     }
 }
 
-impl std::fmt::Display for CBits {
+impl std::fmt::Display for Comp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = match self {
-            CBits::Zero => "0",
-            CBits::One => "1",
-            CBits::NegOne => "-1",
-            CBits::D => "D",
-            CBits::A => "A",
-            CBits::M => "M",
-            CBits::NotD => "!D",
-            CBits::NotA => "!A",
-            CBits::NotM => "!M",
-            CBits::NegD => "-D",
-            CBits::NegA => "-A",
-            CBits::NegM => "-M",
-            CBits::DPlus1 => "D+1",
-            CBits::APlus1 => "A+1",
-            CBits::MPlus1 => "M+1",
-            CBits::DMinus1 => "D-1",
-            CBits::AMinus1 => "A-1",
-            CBits::MMinus1 => "M-1",
-            CBits::DPlusA => "D+A",
-            CBits::DPlusM => "D+M",
-            CBits::DMinusA => "D-A",
-            CBits::DMinusM => "D-M",
-            CBits::AMinusD => "A-D",
-            CBits::MMinusD => "M-D",
-            CBits::DAndA => "D&A",
-            CBits::DAndM => "D&M",
-            CBits::DOrA => "D|A",
-            CBits::DOrM => "D|M",
+        let s = match self {
+            Comp::Zero => "0",
+            Comp::One => "1",
+            Comp::NegOne => "-1",
+            Comp::D => "D",
+            Comp::A => "A",
+            Comp::M => "M",
+            Comp::NotD => "!D",
+            Comp::NotA => "!A",
+            Comp::NotM => "!M",
+            Comp::NegD => "-D",
+            Comp::NegA => "-A",
+            Comp::NegM => "-M",
+            Comp::DPlus1 => "D+1",
+            Comp::APlus1 => "A+1",
+            Comp::MPlus1 => "M+1",
+            Comp::DMinus1 => "D-1",
+            Comp::AMinus1 => "A-1",
+            Comp::MMinus1 => "M-1",
+            Comp::DPlusA => "D+A",
+            Comp::DPlusM => "D+M",
+            Comp::DMinusA => "D-A",
+            Comp::DMinusM => "D-M",
+            Comp::AMinusD => "A-D",
+            Comp::MMinusD => "M-D",
+            Comp::DAndA => "D&A",
+            Comp::DAndM => "D&M",
+            Comp::DOrA => "D|A",
+            Comp::DOrM => "D|M",
         };
-        write!(f, "{str}")
+        write!(f, "{s}")
     }
-}
-
-pub enum InstructionType {
-    A,
-    C,
 }
 
 // wrapper struct
-pub struct Instruction {
-    inner: AsmFlags,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Asm<'a> {
+    Comment(&'a str),
+    Label(&'a str),
+    At(&'a str),
+    Asm(Instruction),
 }
 
-impl From<i16> for Instruction {
+impl From<i16> for Asm<'_> {
     fn from(value: i16) -> Self {
-        Self {
-            inner: AsmFlags { bits: value },
-        }
+        Self::Asm(Instruction::from(value))
     }
 }
 
-impl From<u16> for Instruction {
+impl From<u16> for Asm<'_> {
     #[allow(overflowing_literals)]
     fn from(value: u16) -> Self {
-        Self {
-            inner: AsmFlags { bits: value as i16 },
-        }
+        Self::Asm(Instruction { bits: value as i16 })
     }
 }
 
-impl Binary for Instruction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:016b}", self.inner)
-    }
-}
+// impl<'a> From<&'a str> for Asm<'a> {
+//     fn from(value: &'a str) -> Self {
+//         if let Some(i) = value.strip_prefix('@') {
+//             match i.parse::<i16>() {
+//                 Ok(n) if n >= 0 => Self::Asm(Instruction::from_bits(n).unwrap()),
+//                 // If the address given is not a valid positive signed 16-bit integer, interpret it as a variable
+//                 // Could also return an error, But I think most written assembly would not have intentionally numericized labels
+//                 _ => Self::Aliased(i),
+//             }
+//         } else {
+//             if let Some(i) = value.strip_prefix('(') {
 
-impl Instruction {
-    pub fn is_c_instr(&self) -> bool {
-        self.inner.contains(AsmFlags::C)
+//             }
+//             Ok(Self::Asm(Instruction::from_str(value)?))
+//         }
+//     }
+
+// }
+
+impl<'a> Asm<'a> {
+    pub const SP: Self = Self::At("SP");
+    pub const LCL: Self = Self::At("LCL");
+    pub const ARG: Self = Self::At("ARG");
+    pub const THIS: Self = Self::At("THIS");
+    pub const THAT: Self = Self::At("THAT");
+    pub const R0: Self = Self::At("R0");
+    pub const R1: Self = Self::At("R1");
+    pub const R2: Self = Self::At("R2");
+    pub const R3: Self = Self::At("R3");
+    pub const R4: Self = Self::At("R4");
+    pub const R5: Self = Self::At("R5");
+    pub const R6: Self = Self::At("R6");
+    pub const R7: Self = Self::At("R7");
+    pub const R8: Self = Self::At("R8");
+    pub const R9: Self = Self::At("R9");
+    pub const R10: Self = Self::At("R10");
+    pub const R11: Self = Self::At("R11");
+    pub const R12: Self = Self::At("R12");
+    pub const R13: Self = Self::At("R13");
+    pub const R14: Self = Self::At("R14");
+    pub const R15: Self = Self::At("R15");
+    pub const SCREEN: Self = Self::At("SCREEN");
+    pub const KBD: Self = Self::At("KBD");
+
+    pub const fn comment(input: &'a str) -> Self {
+        Self::Comment(input)
+    }
+
+    pub const fn c_inst(input: &str) -> Self {
+        Self::Asm(Instruction::from_str(input).expect("Only call with valid C instructions"))
+    }
+
+    pub const fn addr(input: i16) -> Self {
+        Self::Asm(Instruction { bits: input })
+    }
+
+    pub const fn label(input: &'a str) -> Self {
+        Self::Label(input)
+    }
+
+    pub fn at(input: &'a str) -> Self {
+        // Optional @
+        Self::At(input.strip_prefix('@').unwrap_or(input))
     }
 }
 
 pub struct Assembler {
-    pub labels: HashMap<String, u16>,
-    pub var_counter: u16,
+    pub labels: HashMap<String, i16>,
+    pub var_counter: i16,
 }
 
 impl Assembler {
@@ -311,7 +476,7 @@ impl Assembler {
     }
 
     // Helper function to abstract over checking the static list first, then the labels unique to this assembly
-    fn get_label(&self, label: &str) -> Option<&u16> {
+    fn get_label(&self, label: &str) -> Option<&i16> {
         if let Some(i) = BUILTIN_LABELS.get(label) {
             Some(i)
         } else if let Some(i) = self.labels.get(label) {
@@ -321,124 +486,124 @@ impl Assembler {
         }
     }
 
-    fn parse_a_instruction(&mut self, input: &str) -> Result<Instruction> {
+    fn parse_a_instruction(&mut self, input: &str) -> Instruction {
         match input.parse::<i16>() {
-            Ok(n) if n >= 0 => Ok(Instruction::from(n)),
+            Ok(n) if n >= 0 => Instruction::from_bits(n).unwrap(),
             // If the address given is not a valid positive signed 16-bit integer, interpret it as a variable
             // Could also return an error, But I think most written assembly would not have intentionally numericized labels
             _ => {
                 if let Some(&addr) = self.get_label(input) {
-                    Ok(Instruction::from(addr))
+                    Instruction::from_bits(addr).unwrap()
                 } else {
                     self.var_counter += 1;
                     self.labels.insert(String::from(input), self.var_counter);
-                    Ok(Instruction::from(self.var_counter))
+                    Instruction::from_bits(self.var_counter).unwrap()
                 }
             }
         }
     }
 
-    fn parse_c_instruction(&self, input: &str) -> Result<Instruction> {
-        let mut inst = AsmFlags::default();
+    // fn parse_c_instruction(&self, input: &str) -> Result<Instruction> {
+    //     let mut inst = Asm::default();
 
-        // There will always be a computation field, so we set the bounds now
-        let mut comp_start = 0;
-        let mut comp_end = input.len();
+    //     // There will always be a computation field, so we set the bounds now
+    //     let mut comp_start = 0;
+    //     let mut comp_end = input.len();
 
-        // DEST
-        // All valid commands with a destination field include '='
-        // Technically this current implementation allows including valid destinations in a non-standard order
-        if let Some(i) = input.find('=') {
-            // we know the start of the computation field comes immediately after the '='
-            comp_start = i + 1;
-            let dest = &input[..i];
+    //     // DEST
+    //     // All valid commands with a destination field include '='
+    //     // Technically this current implementation allows including valid destinations in a non-standard order
+    //     if let Some(i) = input.find('=') {
+    //         // we know the start of the computation field comes immediately after the '='
+    //         comp_start = i + 1;
+    //         let dest = &input[..i];
 
-            // Making sure that only valid destinations are used.
-            if !dest.chars().all(|c| "AMD".contains(c)) {
-                return Err(anyhow!(
-                    "'{dest}' contains an invalid destination character."
-                ));
-            }
+    //         // Making sure that only valid destinations are used.
+    //         if !dest.chars().all(|c| "AMD".contains(c)) {
+    //             return Err(anyhow!(
+    //                 "'{dest}' contains an invalid destination character."
+    //             ));
+    //         }
 
-            // Allowing the destinations in any order might be too permissive, but it's fine for now
-            inst.set(AsmFlags::DEST_A, dest.contains('A'));
-            inst.set(AsmFlags::DEST_M, dest.contains('M'));
-            inst.set(AsmFlags::DEST_D, dest.contains('D'));
-        }
+    //         // Allowing the destinations in any order might be too permissive, but it's fine for now
+    //         inst.set(Asm::DEST_A, dest.contains('A'));
+    //         inst.set(Asm::DEST_M, dest.contains('M'));
+    //         inst.set(Asm::DEST_D, dest.contains('D'));
+    //     }
 
-        // JUMP
-        if let Some(i) = input.find(';') {
-            comp_end = i;
-            let jump = &input[i + 1..];
-            match jump {
-                "JGT" => inst |= AsmFlags::JGT,
-                "JEQ" => inst |= AsmFlags::JEQ,
-                "JGE" => inst |= AsmFlags::JGE,
-                "JLT" => inst |= AsmFlags::JLT,
-                "JNE" => inst |= AsmFlags::JNE,
-                "JLE" => inst |= AsmFlags::JLE,
-                "JMP" => inst |= AsmFlags::JMP,
-                _ => panic!("Semicolon requires a valid jump command!"),
-            }
-        }
+    //     // JUMP
+    //     if let Some(i) = input.find(';') {
+    //         comp_end = i;
+    //         let jump = &input[i + 1..];
+    //         match jump {
+    //             "JGT" => inst |= Asm::JGT,
+    //             "JEQ" => inst |= Asm::JEQ,
+    //             "JGE" => inst |= Asm::JGE,
+    //             "JLT" => inst |= Asm::JLT,
+    //             "JNE" => inst |= Asm::JNE,
+    //             "JLE" => inst |= Asm::JLE,
+    //             "JMP" => inst |= Asm::JMP,
+    //             _ => panic!("Semicolon requires a valid jump command!"),
+    //         }
+    //     }
 
-        // COMP
-        // RIP glorious messy control flow
-        // You were too clever, too permissive, and too unreadable.
-        inst |= match &input[comp_start..comp_end] {
-            "0" => AsmFlags::from(CBits::Zero),
-            "1" => AsmFlags::from(CBits::One),
-            "-1" => AsmFlags::from(CBits::NegOne),
-            "D" => AsmFlags::from(CBits::D),
-            "A" => AsmFlags::from(CBits::A),
-            "M" => AsmFlags::from(CBits::M),
-            "!D" => AsmFlags::from(CBits::NotD),
-            "!A" => AsmFlags::from(CBits::NotA),
-            "!M" => AsmFlags::from(CBits::NotM),
-            // Making the executive decision to allow the real bitwise NOT operator
-            // Especially because it's used instead of ! in the Jack standard
-            "~D" => AsmFlags::from(CBits::NotD),
-            "~A" => AsmFlags::from(CBits::NotA),
-            "~M" => AsmFlags::from(CBits::NotM),
-            // Back to your regularly scheduled standard
-            "-D" => AsmFlags::from(CBits::NegD),
-            "-A" => AsmFlags::from(CBits::NegA),
-            "-M" => AsmFlags::from(CBits::NegM),
-            "D+1" => AsmFlags::from(CBits::DPlus1),
-            "A+1" => AsmFlags::from(CBits::APlus1),
-            "M+1" => AsmFlags::from(CBits::MPlus1),
-            "D-1" => AsmFlags::from(CBits::DMinus1),
-            "A-1" => AsmFlags::from(CBits::AMinus1),
-            "M-1" => AsmFlags::from(CBits::MMinus1),
-            "D-A" => AsmFlags::from(CBits::DMinusA),
-            "D-M" => AsmFlags::from(CBits::DMinusM),
-            "A-D" => AsmFlags::from(CBits::AMinusD),
-            "M-D" => AsmFlags::from(CBits::MMinusD),
-            // Since all of these are semantically equivalent, as long as it's a perfect match we'll allow either order
-            "D+M" | "M+D" => AsmFlags::from(CBits::DPlusM),
-            "D+A" | "A+D" => AsmFlags::from(CBits::DPlusA),
-            "D&A" | "A&D" => AsmFlags::from(CBits::DAndA),
-            "D&M" | "M&D" => AsmFlags::from(CBits::DAndM),
-            "D|A" | "A|D" => AsmFlags::from(CBits::DOrA),
-            "D|M" | "M|D" => AsmFlags::from(CBits::DOrM),
-            _ => return Err(anyhow!("invalid or unsupported computation field")),
-        };
+    //     // COMP
+    //     // RIP glorious messy control flow
+    //     // You were too clever, too permissive, and too unreadable.
+    //     inst |= match &input[comp_start..comp_end] {
+    //         "0" => Asm::from(Comp::Zero),
+    //         "1" => Asm::from(Comp::One),
+    //         "-1" => Asm::from(Comp::NegOne),
+    //         "D" => Asm::from(Comp::D),
+    //         "A" => Asm::from(Comp::A),
+    //         "M" => Asm::from(Comp::M),
+    //         "!D" => Asm::from(Comp::NotD),
+    //         "!A" => Asm::from(Comp::NotA),
+    //         "!M" => Asm::from(Comp::NotM),
+    //         // Making the executive decision to allow the real bitwise NOT operator
+    //         // Especially because it's used instead of ! in the Jack standard
+    //         "~D" => Asm::from(Comp::NotD),
+    //         "~A" => Asm::from(Comp::NotA),
+    //         "~M" => Asm::from(Comp::NotM),
+    //         // Back to your regularly scheduled standard
+    //         "-D" => Asm::from(Comp::NegD),
+    //         "-A" => Asm::from(Comp::NegA),
+    //         "-M" => Asm::from(Comp::NegM),
+    //         "D+1" => Asm::from(Comp::DPlus1),
+    //         "A+1" => Asm::from(Comp::APlus1),
+    //         "M+1" => Asm::from(Comp::MPlus1),
+    //         "D-1" => Asm::from(Comp::DMinus1),
+    //         "A-1" => Asm::from(Comp::AMinus1),
+    //         "M-1" => Asm::from(Comp::MMinus1),
+    //         "D-A" => Asm::from(Comp::DMinusA),
+    //         "D-M" => Asm::from(Comp::DMinusM),
+    //         "A-D" => Asm::from(Comp::AMinusD),
+    //         "M-D" => Asm::from(Comp::MMinusD),
+    //         // Since all of these are semantically equivalent, as long as it's a perfect match we'll allow either order
+    //         "D+M" | "M+D" => Asm::from(Comp::DPlusM),
+    //         "D+A" | "A+D" => Asm::from(Comp::DPlusA),
+    //         "D&A" | "A&D" => Asm::from(Comp::DAndA),
+    //         "D&M" | "M&D" => Asm::from(Comp::DAndM),
+    //         "D|A" | "A|D" => Asm::from(Comp::DOrA),
+    //         "D|M" | "M|D" => Asm::from(Comp::DOrM),
+    //         _ => return Err(anyhow!("invalid or unsupported computation field")),
+    //     };
 
-        Ok(Instruction { inner: inst })
-    }
+    //     Ok(Instruction { inner: inst })
+    // }
 
     pub fn translate(&mut self, input: &str) -> Result<Instruction> {
         // A or C instruction
         if let Some(i) = input.strip_prefix('@') {
-            self.parse_a_instruction(i)
+            Ok(self.parse_a_instruction(i))
         } else {
-            self.parse_c_instruction(input)
+            Instruction::from_str(input)
         }
     }
 
     pub fn assemble(&mut self, asm: &[String]) -> Result<Vec<Instruction>> {
         // first pass
-        let mut line: u16 = 0;
+        let mut line: i16 = 0;
         for com in asm {
             let mut chars = com.chars();
             if let (Some('('), Some(')')) = (chars.next(), chars.next_back()) {
@@ -454,6 +619,30 @@ impl Assembler {
             .iter()
             .filter(|&c| !c.contains('('))
             .map(|c| self.translate(c).expect("valid asm only"))
+            .collect())
+    }
+
+    pub fn assemble_<'a>(
+        &mut self,
+        asm: &mut impl Iterator<Item = Asm<'a>>,
+    ) -> Result<Vec<Instruction>> {
+        let mut line: i16 = 0;
+        for cmd in asm.by_ref() {
+            match cmd {
+                Asm::Label(l) => {
+                    if let Some(i) = self.labels.insert(l.to_string(), line) {
+                        return Err(anyhow!("Duplicate label {l} at {i} and {line}"));
+                    }
+                }
+                _ => line += 1,
+            }
+        }
+        Ok(asm
+            .filter_map(|cmd| match cmd {
+                Asm::Asm(inst) => Some(inst),
+                Asm::At(inst) => Some(self.parse_a_instruction(inst)),
+                _ => None,
+            })
             .collect())
     }
 }
@@ -472,6 +661,7 @@ fn write_bin() {
             }
         }
     }
+    if let Ok(bin) = assembler.assemble(&asm) {}
     let bin = assembler.assemble(&asm).unwrap();
     for b in bin {
         println!("{b:016b}");
@@ -491,7 +681,8 @@ pub mod tests {
     use super::*;
     #[test]
     fn valid_c_bits() {
-        let c_bits = CBits::try_from(AsmFlags::C_NO | AsmFlags::C_F | AsmFlags::C_ND).unwrap();
-        assert_eq!(c_bits, CBits::DMinusA);
+        let c_bits =
+            Comp::try_from(Instruction::C_NO | Instruction::C_F | Instruction::C_ND).unwrap();
+        assert_eq!(c_bits, Comp::DMinusA);
     }
 }
