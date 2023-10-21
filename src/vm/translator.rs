@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::vec;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 
 use super::{Comparison as Cmp, MemSegment as Seg, VmCommand};
 use crate::asm::{Asm, Instruction, Mode};
@@ -164,29 +164,29 @@ impl<'a> VmTranslator<'a> {
                         D=M-1
                         @R13
                         AM=D
-                        ""
+                        "restore saved that segment"
                         D=M
                         @THAT
                         M=D
-                        ""
+                        "restore saved this segment"
                         @R13
                         AM=M-1
                         D=M
                         @THIS
                         M=D
-                        ""
+                        "restore saved argument segment"
                         @R13
                         AM=M-1
                         D=M
                         @ARG
                         M=D
-                        ""
+                        "restore saved local segment"
                         @R13
                         AM=M-1
                         D=M
                         @LCL
                         M=D
-                        ""
+                        "jump to the saved return address"
                         @R14
                         A=M
                         0;JMP
@@ -311,8 +311,8 @@ impl<'a> VmTranslator<'a> {
             }
             v => {
                 // If the constant to be pushed is negative, we can use an A instruction and a bitwise negation to push it
-                // This works for even `i16::MIN` which is why we do it instead of arithmetic negation
-                // If readability is important, -32768 could be special cased
+                // This works for even -32768 which is why we do it instead of arithmetic negation
+                // If readability is important, -32768 could be special cased and the rest could use arithmetic negation
                 // This is a purely internal optimization, although the VM parser could be made to support negative constants
                 // `push constant n`
                 // `neg/not`
@@ -364,7 +364,7 @@ impl<'a> VmTranslator<'a> {
             @SP
             AM=M-1
             D=M
-            @"{label}"
+            @label
             D;JNE
         ]);
     }

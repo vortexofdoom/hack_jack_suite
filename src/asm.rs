@@ -3,9 +3,6 @@ use arbitrary_int::{u15, u3, u7};
 use bitbybit::{bitenum, bitfield};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::convert::Infallible;
-use std::ops::Deref;
-use std::str::FromStr;
 
 #[bitenum(u3, exhaustive: true)]
 #[derive(Debug, PartialEq)]
@@ -919,17 +916,17 @@ pub enum Asm<'a> {
     Asm(Instruction),
 }
 
-trait Str<'a>: Into<Cow<'a, str>> {}
+// trait Str<'a>: Into<Cow<'a, str>> {}
 
-impl<'a> Str<'a> for &'a str {}
-impl Str<'_> for String {}
-impl<'a> Str<'a> for Cow<'a, str> {}
+// impl<'a> Str<'a> for &'a str {}
+// impl Str<'_> for String {}
+// impl<'a> Str<'a> for Cow<'a, str> {}
 
-impl<'a, T: Str<'a>> From<T> for Asm<'a> {
-    fn from(value: T) -> Self {
-        Self::At(value.into())
-    }
-}
+// impl<'a, T: Str<'a>> From<T> for Asm<'a> {
+//     fn from(value: T) -> Self {
+//         Self::At(value.into())
+//     }
+// }
 
 impl From<i16> for Asm<'_> {
     #[allow(overflowing_literals)]
@@ -946,17 +943,17 @@ impl From<u16> for Asm<'_> {
     }
 }
 
-// impl From<String> for Asm<'_> {
-//     fn from(value: String) -> Self {
-//         Self::At(Cow::Owned(value))
-//     }
-// }
+impl From<String> for Asm<'_> {
+    fn from(value: String) -> Self {
+        Self::At(Cow::Owned(value))
+    }
+}
 
-// impl<'a> From<&'a str> for Asm<'a> {
-//     fn from(value: &'a str) -> Self {
-//         Self::At(Cow::Borrowed(value))
-//     }
-// }
+impl<'a> From<&'a str> for Asm<'a> {
+    fn from(value: &'a str) -> Self {
+        Self::At(Cow::Borrowed(value))
+    }
+}
 
 impl std::fmt::Display for Asm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1062,7 +1059,9 @@ impl Asm<'static> {
 
     /// The screen of the Hack platform is hardware-mapped to the address range `0x4000..=0x5FFF`
     ///
-    /// The 1bpp screen is displayed least significant bit to most significant bit from left to right
+    /// Each address in this range corresponds to 16px on the screen, for 1bpp encoding
+    /// 
+    /// The bits are displayed least significant bit to most significant bit from left to right
     pub const SCREEN: Self = Self::At(Cow::Borrowed("SCREEN"));
 
     /// The keyboard is hardware-mapped to the address 24576
@@ -1103,16 +1102,11 @@ impl Assembler {
     #[inline]
     fn get_label(&mut self, label: &str) -> Option<i16> {
         match label {
-            "SP" => Some(0),
-            "LCL" => Some(1),
-            "ARG" => Some(2),
-            "THIS" => Some(3),
-            "THAT" => Some(4),
-            "R0" => Some(0),
-            "R1" => Some(1),
-            "R2" => Some(2),
-            "R3" => Some(3),
-            "R4" => Some(4),
+            "SP" | "R0" => Some(0),
+            "LCL" | "R1" => Some(1),
+            "ARG" | "R2" => Some(2),
+            "THIS" | "R3" => Some(3),
+            "THAT" | "R4" => Some(4),
             "R5" => Some(5),
             "R6" => Some(6),
             "R7" => Some(7),

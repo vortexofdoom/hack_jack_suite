@@ -152,6 +152,7 @@ fn comp_end(input: syn::parse::ParseStream) -> bool {
         || input.peek(LitStr)
         || input.peek(Token![;])
         || (input.peek(LitInt) && !input.peek(Token![-]))
+        || input.peek(Ident) && !(input.peek(kw::A) || input.peek(kw::D))
 }
 
 // TODO: Make spanned compile errors
@@ -160,6 +161,7 @@ impl syn::parse::Parse for Asm {
         let dest;
         let comp;
         let jump;
+        let lookahead = input.lookahead1();
         if input.peek(Token![@]) {
             let _start = input.parse::<Token![@]>()?;
             let lookahead = input.lookahead1();
@@ -272,7 +274,7 @@ impl syn::parse::Parse for Asm {
         } else if input.peek(Ident) {
             Ok(Self::Var(input.parse::<Ident>()?))
         } else {
-            panic!()
+            Err(lookahead.error())
         }
     }
 }
