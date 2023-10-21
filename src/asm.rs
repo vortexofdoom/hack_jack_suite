@@ -3,6 +3,9 @@ use arbitrary_int::{u15, u3, u7};
 use bitbybit::{bitenum, bitfield};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::convert::Infallible;
+use std::ops::Deref;
+use std::str::FromStr;
 
 #[bitenum(u3, exhaustive: true)]
 #[derive(Debug, PartialEq)]
@@ -916,6 +919,18 @@ pub enum Asm<'a> {
     Asm(Instruction),
 }
 
+trait Str<'a>: Into<Cow<'a, str>> {}
+
+impl<'a> Str<'a> for &'a str {}
+impl Str<'_> for String {}
+impl<'a> Str<'a> for Cow<'a, str> {}
+
+impl<'a, T: Str<'a>> From<T> for Asm<'a> {
+    fn from(value: T) -> Self {
+        Self::At(value.into())
+    }
+}
+
 impl From<i16> for Asm<'_> {
     #[allow(overflowing_literals)]
     fn from(value: i16) -> Self {
@@ -930,6 +945,18 @@ impl From<u16> for Asm<'_> {
         Self::Asm(Instruction { raw_value: value })
     }
 }
+
+// impl From<String> for Asm<'_> {
+//     fn from(value: String) -> Self {
+//         Self::At(Cow::Owned(value))
+//     }
+// }
+
+// impl<'a> From<&'a str> for Asm<'a> {
+//     fn from(value: &'a str) -> Self {
+//         Self::At(Cow::Borrowed(value))
+//     }
+// }
 
 impl std::fmt::Display for Asm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

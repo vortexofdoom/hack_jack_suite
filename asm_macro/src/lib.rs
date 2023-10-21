@@ -17,8 +17,8 @@ enum HackLabel {
 impl From<HackLabel> for proc_macro2::TokenStream {
     fn from(value: HackLabel) -> Self {
         match value {
-            HackLabel::Str(s) => s.into_token_stream(),
-            HackLabel::Ident(n) => quote!(std::borrow::Cow::Borrowed(stringify!(#n))),
+            HackLabel::Str(s) => s.into_token_stream(), 
+            HackLabel::Ident(n) => n.into_token_stream(),//quote!(std::borrow::Cow::Borrowed(stringify!(#n))),
             HackLabel::Int(i) => quote!(Instruction::from(#i)),
         }
     }
@@ -101,6 +101,14 @@ fn peek_register(input: syn::parse::ParseStream) -> bool {
         || input.peek(kw::R15)
 }
 
+fn peek_comp(input: syn::parse::ParseStream) -> bool {
+    input.peek(kw::A)
+        || input.peek(kw::D)
+        || input.peek(Token![-])
+        || input.peek(Token![!])
+        || input.peek(LitInt)
+}
+
 // /// if the next token is potentially a dest or comp
 // fn label_done(input: syn::parse::ParseStream) -> bool {
 //     input.is_empty()
@@ -149,7 +157,7 @@ fn comp_end(input: syn::parse::ParseStream) -> bool {
 // TODO: Make spanned compile errors
 impl syn::parse::Parse for Asm {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut dest = quote!(None);
+        let dest;
         let comp;
         let jump;
         if input.peek(Token![@]) {
@@ -160,64 +168,71 @@ impl syn::parse::Parse for Asm {
                 Ok(Asm::At(HackLabel::Int(addr)))
             } else if peek_register(input) || input.peek(kw::MAX) {
                 Ok(Self::At(HackLabel::Ident(input.parse::<Path>()?)))
-            // } else if lookahead.peek(Ident)
-            //     || lookahead.peek(Token![$])
-            //     || lookahead.peek(Token![.])
-            // {
-            //     return Ok(Self::At(HackLabel::Ident(label(input)?)));
             } else if lookahead.peek(LitStr) {
                 Ok(Self::At(HackLabel::Str(input.parse::<LitStr>()?.value())))
+            } else if lookahead.peek(Ident) {
+                return Ok(Self::Var(input.parse::<Ident>()?));
             } else {
                 Err(lookahead.error())
             }
         } else if input.peek(token::Paren) {
             let content;
             let _label: token::Paren = parenthesized!(content in input);
-            if content.peek(LitStr) {
+            let look = content.lookahead1();
+            if look.peek(LitStr) {
                 Ok(Self::Label(HackLabel::Str(
                     content.parse::<LitStr>()?.value(),
                 )))
+            } else if look.peek(Ident) {
+                let ident = content.parse::<Ident>()?;
+                if content.is_empty() {
+                    return Ok(Self::Var(ident));
+                } else {
+                    return Err(look.error())
+                }
             } else {
-                panic!()
-                //return Ok(Self::Label(HackLabel::Str(label(&content)?)));
+                Err(look.error())
             }
         } else if input.peek(syn::LitStr) {
             let comment = input.parse::<syn::LitStr>()?;
             Ok(Self::Comment(comment))
-        } else {
-            if peek_dest(input) && input.peek2(Token![=]) {
+        } else if peek_comp(input) || (peek_dest(input) && input.peek2(Token![=])) {
+            dest = if peek_dest(input) && input.peek2(Token![=]) {
                 let d = input.parse::<Ident>()?;
                 input.parse::<Token![=]>()?;
-                dest = d.to_token_stream();
-            }
+                d.to_token_stream()
+            } else {
+                quote!(None)
+            };
 
+            let look = input.lookahead1();
             // parse comp
             // 0 or 1
-            if input.peek(syn::LitInt) {
+            if look.peek(syn::LitInt) {
                 comp = match input.parse::<LitInt>()?.base10_parse() {
                     Ok(1) => quote!(One),
                     Ok(0) => quote!(Zero),
                     Ok(-1) => quote!(NegOne),
-                    _ => panic!("not an int"),
+                    _ => return Err(look.error()),
                 }
-            } else if input.peek(Token![-]) || input.peek(Token![!]) {
+            } else if look.peek(Token![-]) || look.peek(Token![!]) {
                 // -1, -A, -M, -D, !A, !M, !D
                 let op = match input.parse::<UnOp>()? {
                     UnOp::Not(_) => quote!(Not),
                     UnOp::Neg(_) => quote!(Neg),
-                    _ => panic!("bad unary op"),
+                    _ => return Err(look.error()),
                 };
                 let expr = match input.parse::<Expr>()? {
                     Expr::Lit(l) => match l.lit {
                         Lit::Int(i) => match i.base10_parse() {
                             Ok(1) => quote!(One),
                             Ok(0) => quote!(Zero),
-                            _ => panic!("hi"),
+                            _ => return Err(look.error())
                         },
-                        _ => panic!("bad literal"),
+                        _ => return Err(look.error()),
                     },
                     Expr::Path(p) => p.to_token_stream(),
-                    _ => panic!("bad unary expression"),
+                    _ => return Err(look.error()),
                 };
                 comp = format_ident!("{op}{expr}").to_token_stream();
             } else {
@@ -230,20 +245,21 @@ impl syn::parse::Parse for Asm {
                         BinOp::Sub(_) => quote!(Minus),
                         BinOp::BitAnd(_) => quote!(And),
                         BinOp::BitOr(_) => quote!(Or),
-                        _ => panic!("Hi"),
+                        _ => return Err(look.error()),
                     };
                     let second = if input.peek(LitInt) {
                         match input.parse::<LitInt>()?.base10_parse() {
                             Ok(1) => quote!(One),
                             Ok(0) => quote!(Zero),
-                            c => panic!("{}", c.unwrap()),
+                            _ => return Err(look.error()),
                         }
                     } else {
                         input.parse::<ExprPath>()?.to_token_stream()
                     };
                     comp = format_ident!("{first}{op}{second}").to_token_stream();
-                }
+                } 
             }
+
             jump = if input.peek(Token![;]) {
                 input.parse::<Token![;]>()?;
                 let j = input.parse::<Ident>()?;
@@ -253,6 +269,10 @@ impl syn::parse::Parse for Asm {
             };
 
             Ok(Self::C(CInst { dest, comp, jump }))
+        } else if input.peek(Ident) {
+            Ok(Self::Var(input.parse::<Ident>()?))
+        } else {
+            panic!()
         }
     }
 }
@@ -305,6 +325,7 @@ struct CInst {
 }
 
 enum Asm {
+    Var(Ident),
     At(HackLabel),
     Comment(syn::LitStr),
     Label(HackLabel),
@@ -325,6 +346,7 @@ impl From<Asm> for proc_macro2::TokenStream {
                 }
                 HackLabel::Int(i) => quote!(crate::asm::Asm::Asm(Instruction::from(#i))),
             },
+            Asm::Var(v) => quote!(crate::asm::Asm::from(#v.clone())),
             Asm::Comment(s) => {
                 if s.value().contains('{') {
                     quote!(crate::asm::Asm::Comment(std::borrow::Cow::Owned(format!(#s))))
@@ -339,6 +361,9 @@ impl From<Asm> for proc_macro2::TokenStream {
                     } else {
                         quote!(crate::asm::Asm::Label(std::borrow::Cow::Borrowed(#s)))
                     }
+                }
+                HackLabel::Ident(n) => {
+                    quote!(crate::asm::Asm::Label(std::borrow::Cow::Owned(#n.clone())))
                 }
                 _ => unreachable!(),
             },

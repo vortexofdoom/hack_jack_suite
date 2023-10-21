@@ -11,69 +11,6 @@ use super::{Comparison as Cmp, MemSegment as Seg, VmCommand};
 use crate::asm::{Asm, Instruction, Mode};
 use asm_macro::asm;
 
-pub fn parse(cmd: &str) -> Result<VmCommand> {
-    //asm.push(code_writer::comment(cmd)); // comment with original vm command, stored separately so it can be skipped
-    let parts: Vec<&str> = cmd.split_whitespace().collect();
-    let command = match parts.len() {
-        1 => match parts[0] {
-            "add" => VmCommand::Add,
-            "sub" => VmCommand::Sub,
-            "neg" => VmCommand::Neg,
-            "eq" => VmCommand::Compare(Cmp::Eq),
-            "gt" => VmCommand::Compare(Cmp::GT),
-            "lt" => VmCommand::Compare(Cmp::LT),
-            "and" => VmCommand::And,
-            "or" => VmCommand::Or,
-            "not" => VmCommand::Not,
-            "return" => VmCommand::Return,
-            _ => bail!("No one word command \"{cmd}\""),
-        },
-        2 => match parts[0] {
-            "label" => VmCommand::Label(parts[1]),
-            "goto" => VmCommand::Goto(parts[1]),
-            "if-goto" => VmCommand::IfGoto(parts[1]),
-            _ => bail!("No two word command \"{cmd}\""),
-        },
-        3 => {
-            let arg = parts[2]
-                .parse::<i16>()
-                .map_err(|_| anyhow!("{} is not a valid 16 bit integer", parts[2]))?;
-
-            match (parts[0], parts[1]) {
-                ("push", "local") => VmCommand::Push(Seg::Local, arg),
-                ("pop", "local") => VmCommand::Pop(Seg::Local, arg),
-
-                ("push", "argument") => VmCommand::Push(Seg::Argument, arg),
-                ("pop", "argument") => VmCommand::Pop(Seg::Argument, arg),
-
-                ("push", "this") => VmCommand::Push(Seg::This, arg),
-                ("pop", "this") => VmCommand::Pop(Seg::This, arg),
-
-                ("push", "that") => VmCommand::Push(Seg::That, arg),
-                ("pop", "that") => VmCommand::Pop(Seg::That, arg),
-
-                ("push", "constant") => VmCommand::Push(Seg::Constant, arg),
-
-                ("push", "static") => VmCommand::Push(Seg::Static, arg),
-                ("pop", "static") => VmCommand::Pop(Seg::Static, arg),
-
-                ("push", "pointer") => VmCommand::Push(Seg::Pointer, arg),
-                ("pop", "pointer") => VmCommand::Pop(Seg::Pointer, arg),
-
-                ("push", "temp") => VmCommand::Push(Seg::Temp, arg),
-                ("pop", "temp") => VmCommand::Pop(Seg::Temp, arg),
-
-                ("function", _) => VmCommand::Function(parts[1], arg),
-                ("call", _) => VmCommand::Call(parts[1], arg),
-
-                _ => bail!("No three word command \"{cmd}\""),
-            }
-        }
-        _ => bail!("\"{cmd}\" is not a valid VM command"),
-    };
-    Ok(command)
-}
-
 fn translate_vm(bootstrap: bool) -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let mut files: Vec<PathBuf> = vec![];
@@ -96,16 +33,14 @@ fn translate_vm(bootstrap: bool) -> Result<()> {
             writer.set_filename(file.file_stem().unwrap().to_str().unwrap());
             let reader = BufReader::new(f);
             for line in reader.lines().flatten() {
-                let cmd = line
-                    .find("//")
-                    .map(|i| &line[..i])
-                    .unwrap_or(&line)
-                    .trim()
-                    .to_string();
-                if !cmd.is_empty() {
-                    let vm_cmd = parse(&cmd).expect("could not parse command");
-                    writer.generate_asm(vm_cmd, true)?;
-                }
+                // let cmd = match line.find("//") { //if let Some(i) = line.find("//") {
+                //     Some(i) => &line[..i].trim(),
+                //     _ => &line.trim(),
+                // };
+                // if !cmd.is_empty() {
+                //     let vm_cmd = parse(&cmd).expect("could not parse command");
+                //     writer.generate_asm(vm_cmd, true)?;
+                // }
             }
         }
     }
@@ -154,28 +89,28 @@ impl<'a> VmTranslator<'a> {
     }
 
     /// Naively generates assembly on demand per VM Command.
-    fn generate_asm(&mut self, command: VmCommand, comment: bool) -> Result<()> {
+    #[rustfmt::skip]
+    fn generate_asm(&mut self, command: VmCommand<'a>, comment: bool) -> Result<()> {
         if comment {
            self.asm.push(asm!("{command}"));
         }
-        
+
         match command {
-            VmCommand::Add => self.binary_op(asm!(M = D + M)),
-            VmCommand::Sub => self.binary_op(asm!(M = M - D)),
-            VmCommand::Neg => self.unary_op(asm!(M = -M)),
+            VmCommand::Add => self.binary_op(asm!(M=D+M)),
+            VmCommand::Sub => self.binary_op(asm!(M=M-D)),
+            VmCommand::Neg => self.unary_op(asm!(M=-M)),
             VmCommand::Compare(comp) => self.comparison(comp),
-            VmCommand::And => self.binary_op(asm!(M = D & M)),
-            VmCommand::Or => self.binary_op(asm!(M = D | M)),
-            VmCommand::Not => self.unary_op(asm!(M = !M)),
+            VmCommand::And => self.binary_op(asm!(M=D&M)),
+            VmCommand::Or => self.binary_op(asm!(M=D|M)),
+            VmCommand::Not => self.unary_op(asm!(M=!M)),
             VmCommand::Push(seg, n) => {
                 match seg {
                     Seg::Argument => self.push_segment("ARG", n),
                     Seg::Local => self.push_segment("LCL", n),
                     Seg::This => self.push_segment("THIS", n),
                     Seg::That => self.push_segment("THAT", n),
-
                     Seg::Static => self.push_value(format!("{}.{n}", self.filename), Mode::M),
-                    Seg::Pointer => self.push_value(if n == 0 { "THIS" } else { "THAT" }, Mode::M), // could probably just change this to n + 3
+                    Seg::Pointer => self.push_value(if n == 0 { "THIS" } else { "THAT" }, Mode::M),
                     Seg::Temp => self.push_value(asm!(@"R{n}"), Mode::M),
                     Seg::Constant => self.push_constant(n),
                 }
@@ -206,6 +141,7 @@ impl<'a> VmTranslator<'a> {
                     self.asm.extend(asm![
                     "Shared return subroutine"
                     ("$$RETURN")
+                        "Get the return address from 5 slots before the current local segment and store it in R14"
                         @5
                         D=A
                         @LCL
@@ -213,7 +149,7 @@ impl<'a> VmTranslator<'a> {
                         D=M
                         @R14
                         M=D
-
+                        ""
                         @SP
                         A=M-1
                         D=M
@@ -223,34 +159,34 @@ impl<'a> VmTranslator<'a> {
                         D=A+1
                         @SP
                         M=D
-
+                        ""
                         @LCL
                         D=M-1
                         @R13
                         AM=D
-
+                        ""
                         D=M
                         @THAT
                         M=D
-
+                        ""
                         @R13
                         AM=M-1
                         D=M
                         @THIS
                         M=D
-
+                        ""
                         @R13
                         AM=M-1
                         D=M
                         @ARG
                         M=D
-
+                        ""
                         @R13
                         AM=M-1
                         D=M
                         @LCL
                         M=D
-
+                        ""
                         @R14
                         A=M
                         0;JMP
@@ -281,10 +217,13 @@ impl<'a> VmTranslator<'a> {
         self.asm.extend(vec![
             asm!(@"END_COMP{counter}"),
             match comparison {
-                // jumping if comparison is false
-                Cmp::Eq => asm!(D;JNE),
+                Cmp::EQ => asm!(D;JNE),
                 Cmp::GT => asm!(D;JLE),
                 Cmp::LT => asm!(D;JGE),
+                // Unofficial
+                Cmp::LE => asm!(D;JGT),
+                Cmp::GE => asm!(D;JLT),
+                Cmp::NE => asm!(D;JEQ),
             },
         ]);
 
@@ -340,29 +279,52 @@ impl<'a> VmTranslator<'a> {
             M=D-A
         ]);
     }
+
     // static, pointer, constant (push only)
-    fn push_value<T: Display>(&mut self, var: T, mode: Mode) {
-        self.asm.push(asm!(@"{var}"));
+    fn push_value<T: Display + Into<Asm<'a>>>(&mut self, var: T, mode: Mode) {
+        self.asm.push(var.into());
         self.asm.push(match mode {
-            Mode::A => asm!(D = A),
-            Mode::M => asm!(D = M),
+            Mode::A => asm!(D = A), 
+            Mode::M => asm!(D = M), 
         });
 
         self.push();
     }
 
     fn push_constant(&mut self, var: i16) {
-        // If the constant to be pushed is negative, we can use an A instruction and a bitwise negation to push it
-        // This works for even `i16::MIN` which is why we do it instead of arithmetic negation
-        // If readability is important, -32768 could be special cased
-        if var < 0 {
-            self.asm.extend([Asm::from(!var), asm!(D = !A)]);
-        } else {
-            self.asm.extend([Asm::from(var), asm!(D = A)]);
+        match var {
+            // For supported constants we can just update the top of the stack directly
+            // This saves 2 instructions
+            // This formulation is so I don't have to remember to update this if we change to push-optimized operations
+            v @ -1..=1 => {
+                // Make sure this optimization is always documented, even if not all commands are added as comments
+                self.asm.push(asm!("push constant {v}") );
+                self.push();
+                // Get the last entry in the asm vector
+                let idx = self.asm.len() - 1;
+                self.asm[idx] = match v {
+                    -1 => asm!(M=-1),   
+                    0 => asm!(M=0),
+                    1 => asm!(M=1),
+                    _ => unreachable!(),
+                }
+            }
+            v => {
+                // If the constant to be pushed is negative, we can use an A instruction and a bitwise negation to push it
+                // This works for even `i16::MIN` which is why we do it instead of arithmetic negation
+                // If readability is important, -32768 could be special cased
+                // This is a purely internal optimization, although the VM parser could be made to support negative constants
+                // `push constant n`
+                // `neg/not`
+                if var < 0 {
+                    self.asm.extend([Asm::from(!v), asm!(D=!A)])
+                } else {
+                    self.asm.extend([Asm::from(v), asm!(D=A)])
+                }
+                // Then we push it to the stack
+                self.push();
+            }
         }
-
-        // Then we push it to the stack
-        self.push()
     }
 
     // Helper function to reduce code rewriting if we want to fine-tune the generated assembly
@@ -375,23 +337,24 @@ impl<'a> VmTranslator<'a> {
         ])
     }
 
-    fn pop_value<T: Display>(&mut self, var: T) {
+    fn pop_value<T: Display + Clone>(&mut self, var: T) 
+    where Asm<'a>: From<T> {
         self.asm.extend(asm![
             @SP
             AM=M-1
             D=M
-            @"{var}"
+            @var
             M=D
         ]);
     }
 
     fn def_label(&mut self, label: String) {
-        self.asm.push(asm!(("{label}")));
+        self.asm.push(Asm::Label(label.into()));
     }
 
     fn goto(&mut self, label: String) {
         self.asm.extend(asm![
-            @"{label}"
+            @label
             0;JMP
         ]);
     }
@@ -410,7 +373,7 @@ impl<'a> VmTranslator<'a> {
         self.curr_func = String::from(fn_name);
         self.asm.extend(asm![
         ("{fn_name}")
-            @"{n_vars}"
+            @n_vars
             D=A
             @SP
             AM=D+M
@@ -427,22 +390,47 @@ impl<'a> VmTranslator<'a> {
         ]);
     }
 
-    fn call_func(&mut self, function: &str, n_args: i16) {
+    fn call_func(&mut self, function: &'a str, n_args: i16) {
         let return_label = format!("{}.ret${}", self.filename, self.call_count);
         self.call_count += 1;
 
         // Save return addr
-        // Might want to make this explicitly save in a virtual register
-        self.push_value(&return_label, Mode::A);
+        // This has to be done separately for each call
+        self.push_value(asm!(@return_label), Mode::A);
+        match n_args {
+            0 => self.asm.extend(asm![
+                @R14
+                M=0
+            ]),
+            1 => self.asm.extend(asm![
+                @R14
+                M=1
+            ]),
+            a => self.asm.extend(asm![
+                @a
+                D=A
+                @R14
+                M=D
+            ])
+        }
+        self.asm.extend(asm![
+            @n_args
+            D=A
+        ]);
+
+        // TODO: The rest can be put into a assembly subroutine
+        // We have to store n_args in a temp register
         // Save current stack frame
+        self.asm.push(asm!(("$$Call")));
         self.push_value("LCL", Mode::M);
         self.push_value("ARG", Mode::M);
         self.push_value("THIS", Mode::M);
         self.push_value("THAT", Mode::M);
-
         self.asm.extend(asm![
-            @"{n_args}"
-            D=A
+            //@n_args
+            //D=A
+            @R14
+            D=M
             @5
             D=D+A
             @SP
@@ -453,9 +441,9 @@ impl<'a> VmTranslator<'a> {
             D=M
             @LCL
             M=D
-            @"{function}"
+            @function
             0;JMP
-        ("{return_label}")
+        (return_label)
         ])
     }
 }

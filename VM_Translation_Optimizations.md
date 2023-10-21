@@ -20,7 +20,6 @@ can become:
 
 If an unconditional jump (`_;JMP`) is followed by `@SP`, it can be changed to `A=0;JMP` to save an instruction, as long as the emulator works to the hardware specification (ie. `A` and `M` registers update *after* the jump).
 
-
 which saves the 3 instructions of a unary op
 (TODO: I think unary ops can be entirely optimized out in asm)
 
