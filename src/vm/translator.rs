@@ -32,7 +32,7 @@ fn translate_vm(bootstrap: bool) -> Result<()> {
         if let Ok(f) = File::open(&file) {
             writer.set_filename(file.file_stem().unwrap().to_str().unwrap());
             let reader = BufReader::new(f);
-            for line in reader.lines().flatten() {
+            for _line in reader.lines().flatten() {
                 // let cmd = match line.find("//") { //if let Some(i) = line.find("//") {
                 //     Some(i) => &line[..i].trim(),
                 //     _ => &line.trim(),
@@ -164,29 +164,29 @@ impl<'a> VmTranslator<'a> {
                         D=M-1
                         @R13
                         AM=D
-                        "restore saved that segment"
+                    "restore saved that segment"
                         D=M
                         @THAT
                         M=D
-                        "restore saved this segment"
+                    "restore saved this segment"
                         @R13
                         AM=M-1
                         D=M
                         @THIS
                         M=D
-                        "restore saved argument segment"
+                    "restore saved argument segment"
                         @R13
                         AM=M-1
                         D=M
                         @ARG
                         M=D
-                        "restore saved local segment"
+                    "restore saved local segment"
                         @R13
                         AM=M-1
                         D=M
                         @LCL
                         M=D
-                        "jump to the saved return address"
+                    "jump to the saved return address"
                         @R14
                         A=M
                         0;JMP
@@ -284,8 +284,8 @@ impl<'a> VmTranslator<'a> {
     fn push_value<T: Display + Into<Asm<'a>>>(&mut self, var: T, mode: Mode) {
         self.asm.push(var.into());
         self.asm.push(match mode {
-            Mode::A => asm!(D = A), 
-            Mode::M => asm!(D = M), 
+            Mode::A => asm!(D = A),
+            Mode::M => asm!(D = M),
         });
 
         self.push();
@@ -298,14 +298,14 @@ impl<'a> VmTranslator<'a> {
             // This formulation is so I don't have to remember to update this if we change to push-optimized operations
             v @ -1..=1 => {
                 // Make sure this optimization is always documented, even if not all commands are added as comments
-                self.asm.push(asm!("push constant {v}") );
+                self.asm.push(asm!("push constant {v}"));
                 self.push();
                 // Get the last entry in the asm vector
                 let idx = self.asm.len() - 1;
                 self.asm[idx] = match v {
-                    -1 => asm!(M=-1),   
-                    0 => asm!(M=0),
-                    1 => asm!(M=1),
+                    -1 => asm!(M = -1),
+                    0 => asm!(M = 0),
+                    1 => asm!(M = 1),
                     _ => unreachable!(),
                 }
             }
@@ -317,9 +317,9 @@ impl<'a> VmTranslator<'a> {
                 // `push constant n`
                 // `neg/not`
                 if var < 0 {
-                    self.asm.extend([Asm::from(!v), asm!(D=!A)])
+                    self.asm.extend([Asm::from(!v), asm!(D = !A)])
                 } else {
-                    self.asm.extend([Asm::from(v), asm!(D=A)])
+                    self.asm.extend([Asm::from(v), asm!(D = A)])
                 }
                 // Then we push it to the stack
                 self.push();
@@ -337,8 +337,10 @@ impl<'a> VmTranslator<'a> {
         ])
     }
 
-    fn pop_value<T: Display + Clone>(&mut self, var: T) 
-    where Asm<'a>: From<T> {
+    fn pop_value<T: Display + Clone>(&mut self, var: T)
+    where
+        Asm<'a>: From<T>,
+    {
         self.asm.extend(asm![
             @SP
             AM=M-1
@@ -411,7 +413,7 @@ impl<'a> VmTranslator<'a> {
                 D=A
                 @R14
                 M=D
-            ])
+            ]),
         }
         self.asm.extend(asm![
             @n_args

@@ -19,7 +19,7 @@ impl From<HackLabel> for proc_macro2::TokenStream {
         match value {
             HackLabel::Str(s) => s.into_token_stream(), 
             HackLabel::Ident(n) => n.into_token_stream(),//quote!(std::borrow::Cow::Borrowed(stringify!(#n))),
-            HackLabel::Int(i) => quote!(Instruction::from(#i)),
+            HackLabel::Int(i) => quote!(crate::asm::Instruction::from(#i)),
         }
     }
 }
@@ -346,7 +346,7 @@ impl From<Asm> for proc_macro2::TokenStream {
                         quote!(crate::asm::Asm::At(std::borrow::Cow::Borrowed(#s)))
                     }
                 }
-                HackLabel::Int(i) => quote!(crate::asm::Asm::Asm(Instruction::from(#i))),
+                HackLabel::Int(i) => quote!(crate::asm::Asm::Asm(crate::asm::Instruction::from(#i))),
             },
             Asm::Var(v) => quote!(crate::asm::Asm::from(#v.clone())),
             Asm::Comment(s) => {
@@ -372,7 +372,7 @@ impl From<Asm> for proc_macro2::TokenStream {
             Asm::C(CInst { dest, comp, jump }) => {
                 quote!(
                     crate::asm::Asm::Asm(
-                    Instruction::c(crate::asm::Dest::#dest, crate::asm::ValidComp::#comp, crate::asm::Jump::#jump)
+                    crate::asm::Instruction::c(crate::asm::Dest::#dest, crate::asm::Comp::#comp, crate::asm::Jump::#jump)
                 ))
             }
         }

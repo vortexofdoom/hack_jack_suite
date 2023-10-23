@@ -1,15 +1,19 @@
+use std::ops::RangeInclusive;
+
 use anyhow::{bail, Result};
 
 use crate::{
     asm::*,
     //code_writer::assembler::{Comp, Instruction},
-    tokens::vm_commands::{MemSegment as Seg, VmCommand},
+    vm::{MemSegment as Seg, VmCommand}, io::Screen,
 };
 
 const KBD: i16 = 0x6000;
 const SCREEN_START: i16 = 0x4000;
 const SCREEN_END: i16 = 0x5FFF;
+const SCREEN: RangeInclusive<i16> = 0x4000..=0x5FFF;
 const LCL: i16 = 1;
+
 /// The address of the current frame's `argument` memory segment is stored at address 2.
 pub const ARG: i16 = 2;
 
@@ -23,20 +27,22 @@ pub const THIS: i16 = 3;
 /// This is `pointer 1` in the VM abstraction.
 pub const THAT: i16 = 4;
 
-struct Cpu {
+pub struct Cpu<'a> {
     ram: [i16; 0xFFFF],
     rom: [Instruction; 0xFFFF],
+    screen: Screen<'a>,
     pc: usize,
     d: i16,
     a: i16,
 }
 
 #[allow(overflowing_literals)]
-impl Cpu {
-    fn new() -> Self {
+impl<'a> Cpu<'a> {
+    pub fn new(screen: Screen<'a>) -> Self {
         Self {
             ram: [0; 0xFFFF],
             rom: [Instruction::SP; 0xFFFF],
+            screen,
             pc: 0,
             d: 0,
             a: 0,
@@ -129,10 +135,11 @@ impl Cpu {
                     // Handle the M destination first to avoid writing to the wrong address.
                     if c.dest().m() && self.a != KBD {
                         // Check to see if the A register is pointing to an address in the screen
-                        if let _a @ SCREEN_START..=SCREEN_END = self.a {
-                            // Update screen texture
-                            // Should be a pretty easy targeted 16 pixel update of the texture.
-                            todo!("Update screen");
+                        if SCREEN.contains(&self.a) {
+                            //if let _a @ SCREEN_START..=SCREEN_END = self.a {
+                            self.screen.update(self.a, comp);
+                            //println!("{}={}", self.a, comp);
+                                //.expect("failed to update screen");
                         }
                         *self.m_mut() = comp;
                     }

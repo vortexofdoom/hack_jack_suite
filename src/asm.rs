@@ -12,18 +12,25 @@ use std::collections::HashMap;
 pub enum Dest {
     /// The value computed by the ALU in the `comp` segment will not be stored in a register
     None = 0,
+
     /// The value computed by the ALU in the `comp` segment will be stored in the `M` register
     M = 1,
+
     /// The value computed by the ALU in the `comp` segment will be stored in the `D` register
     D = 2,
+
     /// The value computed by the ALU in the `comp` segment will be stored in `M` and `D` registers
     MD = 3,
+
     /// The value computed by the ALU in the `comp` segment will be stored in the `A` register
     A = 4,
+
     /// The value computed by the ALU in the `comp` segment will be stored in the `A` and `M` registers
     AM = 5,
+
     /// The value computed by the ALU in the `comp` segment will be stored in the `A` and `D` registers
     AD = 6,
+
     /// The value computed by the ALU in the `comp` segment will be stored in the `A`, `M`, and `D` registers
     AMD = 7,
 }
@@ -80,62 +87,89 @@ impl std::fmt::Display for Dest {
 /// Bit 12 is used to determine whether A is read by value (`A`) or as a pointer (`M`/`memory[A]`)
 #[rustfmt::skip]
 #[bitenum(u7, exhaustive: false)]
-pub enum ValidComp {
-    /// The configuration of C bits that translates to the comp `0` in the Hack assembly specification.
+pub enum Comp {
+    /// `comp = 0`
     Zero        = 0b0101010,
-    /// The configuration of C bits that translates to the comp `1` in the Hack assembly specification.
+
+    /// `comp = 1`
     One         = 0b0111111,
-    /// The configuration of C bits that translates to the comp `-1` in the Hack assembly specification.
+
+    /// `comp = -1`
     NegOne      = 0b0111010,
-    /// The configuration of C bits that translates to the comp `D` in the Hack assembly specification.
+
+    /// `comp = D`
     D           = 0b0001100,
-    /// The configuration of C bits that translates to the comp `A` in the Hack assembly specification.
+
+    /// `comp = A`
     A           = 0b0110000,
-    /// The configuration of C bits that translates to the comp `M` in the Hack assembly specification.
+
+    /// `comp = M`
     M           = 0b1110000,
-    /// The configuration of C bits that translates to the comp `!D` in the Hack assembly specification.
+
+    /// `comp = !D`
     NotD        = 0b0001101,
-    /// The configuration of C bits that translates to the comp `!A` in the Hack assembly specification.
+
+    /// `comp = !A`
     NotA        = 0b0110001,
-    /// The configuration of C bits that translates to the comp `!M` in the Hack assembly specification.    
+
+    /// `comp = !M`  
     NotM        = 0b1110001,
-    /// The configuration of C bits that translates to the comp `-D` in the Hack assembly specification.
+
+    /// `comp = -D`
     NegD        = 0b0001111,
-    /// The configuration of C bits that translates to the comp `-A` in the Hack assembly specification.
+
+    /// `comp = -A`
     NegA        = 0b0110011,
-    /// The configuration of C bits that translates to the comp `-M` in the Hack assembly specification.
+
+    /// `comp = -M`
     NegM        = 0b1110011,
-    /// The configuration of C bits that translates to the comp `D+1` in the Hack assembly specification.
+
+    /// `comp = D+1`
     DPlusOne    = 0b0011111,
-    /// The configuration of C bits that translates to the comp `A+1` in the Hack assembly specification.
+
+    /// `comp = A+1`
     APlusOne    = 0b0110111,
-    /// The configuration of C bits that translates to the comp `M+1` in the Hack assembly specification.
+
+    /// `comp = M+1`
     MPlusOne    = 0b1110111,
-    /// The configuration of C bits that translates to the comp `D-1` in the Hack assembly specification.
+    
+    /// `comp = D-1`
     DMinusOne   = 0b0001110,
-    /// The configuration of C bits that translates to the comp `A-1` in the Hack assembly specification.
+    
+    /// `comp = A-1`
     AMinusOne   = 0b0110010,
-    /// The configuration of C bits that translates to the comp `M-1` in the Hack assembly specification.
+    
+    /// `comp = M-1`
     MMinusOne   = 0b1110010,
-    /// The configuration of C bits that translates to the comp `D+A` in the Hack assembly specification.
+    
+    /// `comp = D+A`
     DPlusA      = 0b0000010,
-    /// The configuration of C bits that translates to the comp `D+M` in the Hack assembly specification.
+    
+    /// `comp = D+M`
     DPlusM      = 0b1000010,
-    /// The configuration of C bits that translates to the comp `D-A` in the Hack assembly specification.
+    
+    /// `comp = D-A`
     DMinusA     = 0b0010011,
-    /// The configuration of C bits that translates to the comp `D-M` in the Hack assembly specification.
+    
+    /// `comp = D-M`
     DMinusM     = 0b1010011,
-    /// The configuration of C bits that translates to the comp `A-D` in the Hack assembly specification.
+    
+    /// `comp = A-D`
     AMinusD     = 0b0000111,
-    /// The configuration of C bits that translates to the comp `M-D` in the Hack assembly specification.
+    
+    /// `comp = M-D`
     MMinusD     = 0b1000111,
-    /// The configuration of C bits that translates to the comp `D&A` in the Hack assembly specification.
+    
+    /// `comp = D&A`
     DAndA       = 0b0000000, // lol
-    /// The configuration of C bits that translates to the comp `D&M` in the Hack assembly specification.
+    
+    /// `comp = D&M`
     DAndM       = 0b1000000,
-    /// The configuration of C bits that translates to the comp `D|A` in the Hack assembly specification.
+    
+    /// `comp = D|A`
     DOrA        = 0b0010101,
-    /// The configuration of C bits that translates to the comp `D|M` in the Hack assembly specification.
+    
+    /// `comp = D|M`
     DOrM        = 0b1010101,
 }
 
@@ -293,42 +327,90 @@ pub enum CBits {
     Zero9           = 0b111000,
 
     /// An unspecified C-bit configuration evaluating to `-1`
-    NegOne0         = 0b001001, // !(D & 0)
+    /// 
+    /// !(D & 0)
+    NegOne0         = 0b001001,
+
     /// An unspecified C-bit configuration evaluating to `-1`
-    NegOne1         = 0b011001, // !(!D & 0)
+    /// 
+    /// !(!D & 0)
+    NegOne1         = 0b011001,
+
     /// An unspecified C-bit configuration evaluating to `-1`
-    NegOne2         = 0b100001, // !(0 & A)
+    /// 
+    /// !(0 & A)
+    NegOne2         = 0b100001,
+
     /// An unspecified C-bit configuration evaluating to `-1`
-    NegOne3         = 0b100101, // !(0 & !A)
+    /// 
+    /// !(0 & !A)
+    NegOne3         = 0b100101,
+    
     /// An unspecified C-bit configuration evaluating to `-1`
-    NegOne4         = 0b101001, // !(0 & 0)
+    /// 
+    /// !(0 & 0)
+    NegOne4         = 0b101001,
+
     /// An unspecified C-bit configuration evaluating to `-1`
-    NegOne5         = 0b101011, // !(0 + 0)
+    /// 
+    /// !(0 + 0)
+    NegOne5         = 0b101011,
+    
     /// An unspecified C-bit configuration evaluating to `-1`
-    NegOne6         = 0b101101, // !(0 & -1)
+    /// 
+    /// !(0 & -1)
+    NegOne6         = 0b101101,
+
     /// An unspecified C-bit configuration evaluating to `-1`
-    NegOne7         = 0b101110, // 0 + -1
+    /// 
+    /// 0 + -1
+    NegOne7         = 0b101110,
+
     /// An unspecified C-bit configuration evaluating to `-1`
-    NegOne8         = 0b111001, // !(-1 & 0)
+    /// 
+    /// !(-1 & 0)
+    NegOne8         = 0b111001,
+    
     /// An unspecified C-bit configuration evaluating to `-1`
-    NegOne9         = 0b111100, // -1 & -1
+    /// 
+    /// -1 & -1
+    NegOne9         = 0b111100,
     
     /// An unspecified C-bit configuration evaluating to `D`
-    D0              = 0b001010, // D + 0
+    /// 
+    /// D + 0
+    D0              = 0b001010,
+    
     /// An unspecified C-bit configuration evaluating to `D`
-    D1              = 0b011011, // !(!D + 0)
+    /// 
+    /// !(!D + 0)
+    D1              = 0b011011,
+
     /// An unspecified C-bit configuration evaluating to `D`
-    D2              = 0b011101, // !(!D & -1)
+    /// 
+    /// !(!D & -1)
+    D2              = 0b011101,
 
     /// An unspecified C-bit configuration evaluating to `A`
-    A0              = 0b100010, // 0 + A
+    /// 
+    /// 0 + A
+    A0              = 0b100010,
+
     /// An unspecified C-bit configuration evaluating to `A`
-    A1              = 0b100111, // !(0 + !A)
+    /// 
+    /// !(0 + !A)
+    A1              = 0b100111,
+
     /// An unspecified C-bit configuration evaluating to `A`
-    A2              = 0b110101, // !(-1 & !A)
+    /// 
+    /// !(-1 & !A)
+    A2              = 0b110101,
+    
     // !D
     /// An unspecified C-bit configuration evaluating to `!D`
-    NotD0           = 0b001011, // !(D + 0)
+    /// 
+    /// !(D + 0)
+    NotD0           = 0b001011,
 
     /// An unspecified C-bit configuration evaluating to `!D`
     /// 
@@ -455,28 +537,28 @@ impl std::fmt::Display for Mode {
 
 /// The combination of the address bit and C-bits, which determines the Computation portion of a C instruction.
 ///
-/// Not all configurations are valid, those that are can be found in the `ValidComp` enum.
+/// Not all configurations are valid, those that are can be found in the `Comp` enum.
 /// If the bit configuration is valid, it can be accessed with the `comp()` method.
 ///
 /// However, all bit configurations and their resulting computations are mapped by the `Mode` and `CBits` enums,
 /// and are accessible through the `mode()` and `c_bits()` methods.
 #[bitfield(u7)]
-pub(crate) struct Comp {
+pub(crate) struct CompBits {
     #[bits(0..=6, rw)]
-    comp: Option<ValidComp>,
+    comp: Option<Comp>,
     #[bit(6, rw)]
     mode: Mode,
     #[bits(0..=5, rw)]
     c_bits: CBits,
 }
 
-impl Comp {
-    pub const fn new_valid(comp: ValidComp) -> Self {
+impl CompBits {
+    pub const fn new_valid(comp: Comp) -> Self {
         Self { raw_value: 0 }.with_comp(comp)
     }
 
     /// If the bits are in an officially specified configuration, returns that computation. Otherwise returns `None`.
-    pub const fn get(self) -> Option<ValidComp> {
+    pub const fn get(self) -> Option<Comp> {
         match self.comp() {
             Ok(c) => Some(c),
             Err(_) => None,
@@ -484,7 +566,7 @@ impl Comp {
     }
 }
 
-impl std::fmt::Display for Comp {
+impl std::fmt::Display for CompBits {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use CBits as C;
         match self.c_bits() {
@@ -608,7 +690,7 @@ pub enum AInst {
 pub struct CInstruction {
     /// The computation bits of a C-Instruction (bits 6-12)
     #[bits(6..=12, rw)]
-    comp: Comp,
+    comp: CompBits,
 
     /// The destination bits of a C-Instruction (bits 3, 4, and 5).
     #[bits(3..=5, rw)]
@@ -689,11 +771,11 @@ impl Instruction {
 
     #[inline]
     /// Creates a new C instruction with the given `dest`, `comp`, and `jump` segments.
-    pub(crate) const fn c(dest: Dest, comp: ValidComp, jump: Jump) -> Self {
+    pub(crate) const fn c(dest: Dest, comp: Comp, jump: Jump) -> Self {
         Instruction::DEFAULT.with_c_inst(
             CInstruction::DEFAULT
                 .with_dest(DestBits::DEFAULT.with_get(dest))
-                .with_comp(Comp::new_valid(comp))
+                .with_comp(CompBits::new_valid(comp))
                 .with_jump(jump),
         )
     }
@@ -830,7 +912,7 @@ impl Instruction {
     /// Convenience for unconditional jumps that do not take advantage of computation/destination optimizations such as `A=0;JMP`
     ///
     /// Represented in assembly as `0;JMP`
-    pub const JMP: Self = Self::c(Dest::None, ValidComp::Zero, Jump::JMP);
+    pub const JMP: Self = Self::c(Dest::None, Comp::Zero, Jump::JMP);
 
     /// The max addressable value of an A instruction.
     ///
@@ -975,7 +1057,7 @@ impl Asm<'static> {
     /// The address of the stack pointer is always held at address 0.
     ///
     /// In the official specification, the stack pointer is one past the top of the stack,
-    /// which ends up making `pop` operations one instruction longer than `push` operations.
+    /// which ends up making `push` operations one instruction longer than `pop` operations.
     ///
     /// However, most VM code involves more pushes than pops, because arithmetic operations move the stack pointer without popping,
     /// and function arguments and stack frames are pushed on but not (necessarily) popped off.
@@ -1059,8 +1141,8 @@ impl Asm<'static> {
 
     /// The screen of the Hack platform is hardware-mapped to the address range `0x4000..=0x5FFF`
     ///
-    /// Each address in this range corresponds to 16px on the screen, for 1bpp encoding
-    /// 
+    /// Each address in this range corresponds to 16px on the 512 x 256 screen, with 1bpp encoding
+    ///
     /// The bits are displayed least significant bit to most significant bit from left to right
     pub const SCREEN: Self = Self::At(Cow::Borrowed("SCREEN"));
 
@@ -1079,7 +1161,7 @@ impl Asm<'static> {
 
 impl<'a> Asm<'a> {
     #[inline]
-    pub fn at_opt(input: &'a str) -> Self {
+    pub fn at(input: &'a str) -> Self {
         // Optional @
         Self::At(input.strip_prefix('@').unwrap_or(input).into())
     }
@@ -1180,38 +1262,38 @@ impl Assembler {
 
         // COMP
         let comp = match &input[comp_start..comp_end] {
-            "0" => ValidComp::Zero,
-            "1" => ValidComp::One,
-            "-1" => ValidComp::NegOne,
-            "D" => ValidComp::D,
-            "A" => ValidComp::A,
-            "M" => ValidComp::M,
+            "0" => Comp::Zero,
+            "1" => Comp::One,
+            "-1" => Comp::NegOne,
+            "D" => Comp::D,
+            "A" => Comp::A,
+            "M" => Comp::M,
             // Making the executive decision to allow '~' as a bitwise NOT operator
             // Especially because it's used instead of ! in the Jack standard
-            "!D" | "~D" => ValidComp::NotD,
-            "!A" | "~A" => ValidComp::NotA,
-            "!M" | "~M" => ValidComp::NotM,
+            "!D" | "~D" => Comp::NotD,
+            "!A" | "~A" => Comp::NotA,
+            "!M" | "~M" => Comp::NotM,
             // Since all of these are semantically equivalent, as long as it's a perfect match we'll allow either order
-            "D+A" | "A+D" => ValidComp::DPlusA,
-            "D+M" | "M+D" => ValidComp::DPlusM,
-            "D&A" | "A&D" => ValidComp::DAndA,
-            "D&M" | "M&D" => ValidComp::DAndM,
-            "D|A" | "A|D" => ValidComp::DOrA,
-            "D|M" | "M|D" => ValidComp::DOrM,
+            "D+A" | "A+D" => Comp::DPlusA,
+            "D+M" | "M+D" => Comp::DPlusM,
+            "D&A" | "A&D" => Comp::DAndA,
+            "D&M" | "M&D" => Comp::DAndM,
+            "D|A" | "A|D" => Comp::DOrA,
+            "D|M" | "M|D" => Comp::DOrM,
             // Back to your regularly scheduled standard
-            "-D" => ValidComp::NegD,
-            "-A" => ValidComp::NegA,
-            "-M" => ValidComp::NegM,
-            "D+1" => ValidComp::DPlusOne,
-            "A+1" => ValidComp::APlusOne,
-            "M+1" => ValidComp::MPlusOne,
-            "D-1" => ValidComp::DMinusOne,
-            "A-1" => ValidComp::AMinusOne,
-            "M-1" => ValidComp::MMinusOne,
-            "D-A" => ValidComp::DMinusA,
-            "D-M" => ValidComp::DMinusM,
-            "A-D" => ValidComp::AMinusD,
-            "M-D" => ValidComp::MMinusD,
+            "-D" => Comp::NegD,
+            "-A" => Comp::NegA,
+            "-M" => Comp::NegM,
+            "D+1" => Comp::DPlusOne,
+            "A+1" => Comp::APlusOne,
+            "M+1" => Comp::MPlusOne,
+            "D-1" => Comp::DMinusOne,
+            "A-1" => Comp::AMinusOne,
+            "M-1" => Comp::MMinusOne,
+            "D-A" => Comp::DMinusA,
+            "D-M" => Comp::DMinusM,
+            "A-D" => Comp::AMinusD,
+            "M-D" => Comp::MMinusD,
             _ => bail!("invalid or unsupported computation field"),
         };
 
