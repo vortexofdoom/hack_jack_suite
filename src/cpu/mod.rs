@@ -4,8 +4,9 @@ use anyhow::{bail, Result};
 
 use crate::{
     asm::*,
+    io::Screen,
     //code_writer::assembler::{Comp, Instruction},
-    vm::{MemSegment as Seg, VmCommand}, io::Screen,
+    vm::{MemSegment as Seg, VmCommand},
 };
 
 const KBD: i16 = 0x6000;
@@ -31,7 +32,7 @@ pub struct Cpu<'a> {
     ram: [i16; 0xFFFF],
     rom: [Instruction; 0xFFFF],
     screen: Screen<'a>,
-    pc: usize,
+    pub(crate) pc: usize,
     d: i16,
     a: i16,
 }
@@ -41,7 +42,7 @@ impl<'a> Cpu<'a> {
     pub fn new(screen: Screen<'a>) -> Self {
         Self {
             ram: [0; 0xFFFF],
-            rom: [Instruction::SP; 0xFFFF],
+            rom: [Instruction::from(0); 0xFFFF],
             screen,
             pc: 0,
             d: 0,
@@ -51,12 +52,12 @@ impl<'a> Cpu<'a> {
 
     #[inline]
     const fn m(&self) -> i16 {
-        self.ram[self.a as usize]
+        self.ram[self.a as u16 as usize]
     }
 
     #[inline]
     fn m_mut(&mut self) -> &mut i16 {
-        &mut self.ram[self.a as usize]
+        &mut self.ram[self.a as u16 as usize]
     }
 
     #[inline]
@@ -66,7 +67,7 @@ impl<'a> Cpu<'a> {
 
     #[inline]
     fn at_mut(&mut self, addr: i16) -> &mut i16 {
-        &mut self.ram[addr as usize]
+        &mut self.ram[addr as u16 as usize]
     }
 
     #[inline]
@@ -88,72 +89,79 @@ impl<'a> Cpu<'a> {
         self.at_mut(sp)
     }
 
-    pub fn tick(&mut self) {}
+    pub fn set_kbd(&mut self, kbd: i16) {
+        self.ram[KBD as usize] = kbd;
+    }
 
-    pub fn execute_asm(&mut self, asm: &[Instruction]) -> Result<()> {
-        for i in asm {
-            use InstructionType as Inst;
-            match i.get()? {
-                // an address will always be an unsigned 15 bit integer, so can never overflow an i16.
-                Inst::A(addr) => self.a = addr.value() as i16,
-                Inst::C(c) => {
-                    // get a reference to the A or M register
-                    let a_comp = self.a_comp(c.comp().mode());
-                    let comp = match c.comp().c_bits() {
-                        CBits::Zero => 0,
-                        CBits::One => 1,
-                        CBits::NegOne => -1,
-                        CBits::D => self.d,
-                        CBits::A => a_comp,
-                        CBits::NotD => !self.d,
-                        CBits::NotA => !a_comp,
-                        CBits::NegD => -self.d,
-                        CBits::NegA => -a_comp,
-                        CBits::DPlusOne => self.d.wrapping_add(1),
-                        CBits::APlusOne => a_comp.wrapping_add(1),
-                        CBits::DMinusOne => self.d.wrapping_sub(1),
-                        CBits::AMinusOne => a_comp.wrapping_sub(1),
-                        CBits::DPlusA => self.d.wrapping_add(a_comp),
-                        CBits::DMinusA => self.d.wrapping_sub(a_comp),
-                        CBits::AMinusD => a_comp.wrapping_sub(self.d),
-                        CBits::DAndA => self.d & a_comp,
-                        CBits::DOrA => self.d | a_comp,
-                        _ => bail!("Invalid C Bits"),
-                    };
+    pub fn tick(&mut self, asm: &[Instruction]) -> Result<()> {
+        use InstructionType as Inst;
+        //println!("{}", self.ram[KBD as usize]);
+        let inst = asm[self.pc];
+        //println!("Start: A: {} D: {} M: {} PC: {}", self.a, self.d, self.m(), self.pc);
+        println!("{inst}");
+        self.pc += 1;
+        match inst.get()? {
+            // an address will always be an unsigned 15 bit integer, so can never overflow an i16.
+            Inst::A(addr) => {
+                self.a = addr.value() as i16;
+            }
+            Inst::C(c) => {
+                // get a reference to the A or M register
+                let a_comp = self.a_comp(c.comp().mode());
+                let comp = match c.comp().c_bits() {
+                    CBits::Zero => 0,
+                    CBits::One => 1,
+                    CBits::NegOne => -1,
+                    CBits::D => self.d,
+                    CBits::A => a_comp,
+                    CBits::NotD => !self.d,
+                    CBits::NotA => !a_comp,
+                    CBits::NegD => -self.d,
+                    CBits::NegA => -a_comp,
+                    CBits::DPlusOne => self.d.wrapping_add(1),
+                    CBits::APlusOne => a_comp.wrapping_add(1),
+                    CBits::DMinusOne => self.d.wrapping_sub(1),
+                    CBits::AMinusOne => a_comp.wrapping_sub(1),
+                    CBits::DPlusA => self.d.wrapping_add(a_comp),
+                    CBits::DMinusA => self.d.wrapping_sub(a_comp),
+                    CBits::AMinusD => a_comp.wrapping_sub(self.d),
+                    CBits::DAndA => self.d & a_comp,
+                    CBits::DOrA => self.d | a_comp,
+                    _ => bail!("Invalid C Bits"),
+                };
 
-                    // Calculate jump before updating registers from destination
-                    // Not doing this is the cause of the official CPU emulator bug
-                    if (c.jump() == Jump::JMP)
-                        || (c.jeq() && comp == 0)
-                        || (c.jgt() && comp > 0)
-                        || (c.jlt() && comp < 0)
-                    {
-                        self.pc = self.a as usize;
+                // Calculate jump before updating registers from destination
+                // Not doing this is the cause of the official CPU emulator bug
+                if (c.jump() == Jump::JMP)
+                    || (c.jeq() && comp == 0)
+                    || (c.jgt() && comp > 0)
+                    || (c.jlt() && comp < 0)
+                {
+                    self.pc = self.a as usize;
+                }
+                // Do not allow writing to the KBD register
+                // Handle the M destination first to avoid writing to the wrong address.
+                if c.dest().m() && self.a != KBD {
+                    // Check to see if the A register is pointing to an address in the screen
+                    if SCREEN.contains(&self.a) {
+                        //if let _a @ SCREEN_START..=SCREEN_END = self.a {
+                        self.screen.update(self.a, comp);
+                        //println!("{}={}", self.a, comp);
+                        //.expect("failed to update screen");
                     }
+                    *self.m_mut() = comp;
+                }
 
-                    // Do not allow writing to the KBD register
-                    // Handle the M destination first to avoid writing to the wrong address.
-                    if c.dest().m() && self.a != KBD {
-                        // Check to see if the A register is pointing to an address in the screen
-                        if SCREEN.contains(&self.a) {
-                            //if let _a @ SCREEN_START..=SCREEN_END = self.a {
-                            self.screen.update(self.a, comp);
-                            //println!("{}={}", self.a, comp);
-                                //.expect("failed to update screen");
-                        }
-                        *self.m_mut() = comp;
-                    }
-
-                    // The other destination bits are more permissive
-                    if c.dest().a() {
-                        self.a = comp;
-                    }
-                    if c.dest().d() {
-                        self.d = comp;
-                    }
+                // The other destination bits are more permissive
+                if c.dest().a() {
+                    self.a = comp;
+                }
+                if c.dest().d() {
+                    self.d = comp;
                 }
             }
         }
+        //println!("End: A: {} D: {} M: {} PC: {}", self.a, self.d, self.m(), self.pc);
         Ok(())
     }
 

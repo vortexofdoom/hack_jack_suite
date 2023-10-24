@@ -9,14 +9,14 @@ mod io;
 //mod jack_compiler;
 //mod tokens;
 
-use asm::Assembler;
 use anyhow::Result;
+use asm::Assembler;
 //use crate::jack_compiler::compilation_engine::CompilationEngine;
 use clap::{Args, Parser, Subcommand};
 use cpu::Cpu;
-use io::Screen;
-use sdl2::event::{self, Event};
-use std::path::{Path, PathBuf};
+use io::{get_key, Screen};
+use sdl2::event::Event;
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 pub struct ProgArgs {
@@ -37,7 +37,6 @@ pub struct CompileArgs {
 }
 
 fn main() -> Result<(), String> {
-
     // let args: Vec<String> = std::env::args().collect();
     // let mut files: Vec<PathBuf> = vec![];
     // let file_path = Path::new(&args[1]);
@@ -60,7 +59,8 @@ fn main() -> Result<(), String> {
     let sdl_context = sdl2::init()?;
     let video_subsys = sdl_context.video()?;
 
-    let window = video_subsys.window("Hack Emulator", 512, 256)
+    let window = video_subsys
+        .window("Hack Emulator", 512, 256)
         .position_centered()
         .build()
         .expect("Could not initialize window");
@@ -72,55 +72,71 @@ fn main() -> Result<(), String> {
 
     let creator = canvas.texture_creator();
 
-    let texture = creator.create_texture_streaming(Some(sdl2::pixels::PixelFormatEnum::RGB24), 512, 256).expect("failed to create texture");
+    let texture = creator
+        .create_texture_streaming(Some(sdl2::pixels::PixelFormatEnum::RGB24), 512, 256)
+        .expect("failed to create texture");
 
     let screen = Screen::new(canvas, texture);
     let mut cpu = Cpu::new(screen);
 
     let mut event_pump = sdl_context.event_pump()?;
-    
+
     let mut assembler = Assembler::new();
 
+    let i = "i";
+    let address = "address";
+    const LOOP: &str = "LOOP";
+    const END: &str = "END";
     let asm = assembler.assemble(&asm_macro::asm![
-        @0
-        D=M
-        @23
-        D;JLE
-        @16
-        M=D
-        @16384
+        @65
         D=A
-        @17
+        @R0
         M=D
-        @17
+        D=M
+        @i
+        M=D
+
+        @SCREEN
+        D=A
+        @address
+        M=D
+
+    ("LOOP")
+        @i
+        D=M
+        @END
+        D;JEQ
+
+        @address
         A=M
         M=-1
-        @17
-        D=M
+
+        @i
+        M=M-1
         @32
-        D=D+A
-        @17
-        M=D
-        @16
-        MD=M-1
-        @10
-        D;JGT
-        @23
+        D=A
+        @address
+        M=D+M
+        @LOOP
+        0;JMP
+
+    ("END")
+        @END
         0;JMP
     ]);
 
-    cpu.execute_asm(&asm)
-        .map_err(|e| e.to_string())?;
-
     'running: loop {
-        for event in event_pump.poll_iter() {
+        if let Some(event) = event_pump.poll_event() {
             match event {
                 Event::Quit { .. } => break 'running,
+                Event::KeyDown { .. } | Event::KeyUp { .. } => {
+                    cpu.set_kbd(get_key(event_pump.keyboard_state()))
+                }
                 _ => {}
             }
         }
+        cpu.tick(&asm).map_err(|e| e.to_string())?;
     }
-
 
     Ok(())
 }

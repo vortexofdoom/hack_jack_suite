@@ -1,4 +1,10 @@
-use sdl2::{keyboard::Keycode, pixels::{PixelFormatEnum, Color}, render::{Texture, UpdateTextureError, Canvas}, rect::Rect, video::Window};
+use sdl2::{
+    keyboard::{KeyboardState, Keycode as K, Scancode},
+    pixels::Color,
+    rect::Rect,
+    render::{Canvas, Texture},
+    video::Window,
+};
 
 type Pixel = [u8; 3];
 
@@ -14,7 +20,9 @@ impl<'a> Screen<'a> {
         let (mut canvas, mut texture) = (canvas, texture);
         canvas.set_draw_color(Color::WHITE);
         canvas.clear();
-        texture.update(None, &[255; 3 * 512 * 256], 3 * 512).unwrap();
+        texture
+            .update(None, &[255; 3 * 512 * 256], 3 * 512)
+            .unwrap();
         canvas.present();
         Self { canvas, texture }
     }
@@ -38,110 +46,144 @@ const fn get_register(addr: i16) -> (i32, i32, u32, u32) {
 pub fn as_pixels(value: i16) -> [u8; 48] {
     let mut res = [0; 48];
     for (i, p) in res.chunks_mut(3).enumerate() {
-        p.copy_from_slice(if value >> i == 0 {
-            &OFF
-        } else {
-            &ON
-        });
+        p.copy_from_slice(if value >> i == 0 { &OFF } else { &ON });
     }
     res
 }
 
-pub(crate) fn get_key(code: Keycode) -> i16 {
-    match code {
-        // These are all the same as their ascii equivalents
-        Keycode::Tab
-        | Keycode::Escape
-        | Keycode::Space
-        | Keycode::Exclaim
-        | Keycode::Quotedbl
-        | Keycode::Hash
-        | Keycode::Dollar
-        | Keycode::Percent
-        | Keycode::Ampersand
-        | Keycode::Quote
-        | Keycode::LeftParen
-        | Keycode::RightParen
-        | Keycode::Asterisk
-        | Keycode::Plus
-        | Keycode::Comma
-        | Keycode::Minus
-        | Keycode::Period
-        | Keycode::Slash
-        | Keycode::Num0
-        | Keycode::Num1
-        | Keycode::Num2
-        | Keycode::Num3
-        | Keycode::Num4
-        | Keycode::Num5
-        | Keycode::Num6
-        | Keycode::Num7
-        | Keycode::Num8
-        | Keycode::Num9
-        | Keycode::Colon
-        | Keycode::Semicolon
-        | Keycode::Less
-        | Keycode::Equals
-        | Keycode::Greater
-        | Keycode::Question
-        | Keycode::At
-        | Keycode::LeftBracket
-        | Keycode::Backslash
-        | Keycode::RightBracket
-        | Keycode::Caret
-        | Keycode::Underscore
-        | Keycode::Backquote
-        | Keycode::A
-        | Keycode::B
-        | Keycode::C
-        | Keycode::D
-        | Keycode::E
-        | Keycode::F
-        | Keycode::G
-        | Keycode::H
-        | Keycode::I
-        | Keycode::J
-        | Keycode::K
-        | Keycode::L
-        | Keycode::M
-        | Keycode::N
-        | Keycode::O
-        | Keycode::P
-        | Keycode::Q
-        | Keycode::R
-        | Keycode::S
-        | Keycode::T
-        | Keycode::U
-        | Keycode::V
-        | Keycode::W
-        | Keycode::X
-        | Keycode::Y
-        | Keycode::Z => code as i16,
-        Keycode::Return => 128,
-        Keycode::Backspace => 129,
-        Keycode::Left => 130,
-        Keycode::Up => 131,
-        Keycode::Right => 132,
-        Keycode::Down => 133,
-        Keycode::Home => 134,
-        Keycode::PageUp => 136,
-        Keycode::End => 135,
-        Keycode::PageDown => 137,
-        Keycode::Insert => 138,
-        Keycode::Delete => 139,
-        Keycode::F1 => 141,
-        Keycode::F2 => 142,
-        Keycode::F3 => 143,
-        Keycode::F4 => 144,
-        Keycode::F5 => 145,
-        Keycode::F6 => 146,
-        Keycode::F7 => 147,
-        Keycode::F8 => 148,
-        Keycode::F9 => 149,
-        Keycode::F10 => 150,
-        Keycode::F11 => 151,
-        Keycode::F12 => 152,
-        _ => 0,
+pub(crate) fn get_key(kbd: KeyboardState) -> i16 {
+    let mut pressed = kbd.pressed_scancodes().filter_map(K::from_scancode);
+    match pressed.next() {
+        Some(k) => {
+            if kbd.is_scancode_pressed(Scancode::from_keycode(K::LShift).unwrap())
+                || kbd.is_scancode_pressed(Scancode::from_keycode(K::RShift).unwrap())
+            {
+                //pressed.any(|k| k == K::LShift || k == K::RShift) {
+                match k {
+                    k if (k as u8 as char).is_ascii_alphabetic() => return (k as i16) - 32,
+                    K::Num0 => return K::RightParen as i16,
+                    K::Num1 => return K::Exclaim as i16,
+                    K::Num2 => return K::At as i16,
+                    K::Num3 => return K::Hash as i16,
+                    K::Num4 => return K::Dollar as i16,
+                    K::Num5 => return K::Percent as i16,
+                    K::Num6 => return K::Caret as i16,
+                    K::Num7 => return K::Ampersand as i16,
+                    K::Num8 => return K::Asterisk as i16,
+                    K::Num9 => return K::LeftParen as i16,
+                    K::Equals => return K::Plus as i16,
+                    K::LeftBracket => return 123,
+                    K::Backslash => return 124,
+                    K::RightBracket => return 125,
+                    K::Backquote => return 126,
+                    K::Comma => return K::Less as i16,
+                    K::Period => return K::Greater as i16,
+                    K::Slash => return K::Question as i16,
+                    K::Minus => return K::Underscore as i16,
+                    _ => {}
+                }
+            }
+
+            match k {
+                // These are all the same as their ascii equivalents
+                K::Tab
+                | K::Escape
+                | K::Space
+                | K::Exclaim
+                | K::Quotedbl
+                | K::Hash
+                | K::Dollar
+                | K::Percent
+                | K::Ampersand
+                | K::Quote
+                | K::LeftParen
+                | K::RightParen
+                | K::Asterisk
+                | K::Plus
+                | K::Comma
+                | K::Minus
+                | K::Period
+                | K::Slash
+                | K::Num0
+                | K::Num1
+                | K::Num2
+                | K::Num3
+                | K::Num4
+                | K::Num5
+                | K::Num6
+                | K::Num7
+                | K::Num8
+                | K::Num9
+                | K::Colon
+                | K::Semicolon
+                | K::Less
+                | K::Equals
+                | K::Greater
+                | K::Question
+                | K::At
+                | K::LeftBracket
+                | K::Backslash
+                | K::RightBracket
+                | K::Caret
+                | K::Underscore
+                | K::Backquote
+                | K::A
+                | K::B
+                | K::C
+                | K::D
+                | K::E
+                | K::F
+                | K::G
+                | K::H
+                | K::I
+                | K::J
+                | K::K
+                | K::L
+                | K::M
+                | K::N
+                | K::O
+                | K::P
+                | K::Q
+                | K::R
+                | K::S
+                | K::T
+                | K::U
+                | K::V
+                | K::W
+                | K::X
+                | K::Y
+                | K::Z => k as i16,
+                K::KpLeftBrace => 123,
+                K::KpVerticalBar => 124,
+                K::KpRightBrace => 125,
+                K::Return => 128,
+                K::Backspace => 129,
+                K::Left => 130,
+                K::Up => 131,
+                K::Right => 132,
+                K::Down => 133,
+                K::Home => 134,
+                K::PageUp => 136,
+                K::End => 135,
+                K::PageDown => 137,
+                K::Insert => 138,
+                K::Delete => 139,
+                K::F1 => 141,
+                K::F2 => 142,
+                K::F3 => 143,
+                K::F4 => 144,
+                K::F5 => 145,
+                K::F6 => 146,
+                K::F7 => 147,
+                K::F8 => 148,
+                K::F9 => 149,
+                K::F10 => 150,
+                K::F11 => 151,
+                K::F12 => 152,
+                _ => 0,
+            }
+        }
+        None => 0,
     }
 }
 

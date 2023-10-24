@@ -8,7 +8,7 @@ use std::vec;
 use anyhow::{bail, Result};
 
 use super::{Comparison as Cmp, MemSegment as Seg, VmCommand};
-use crate::asm::{Asm, Instruction, Mode};
+use crate::asm::{Asm, Mode};
 use asm_macro::asm;
 
 fn translate_vm(bootstrap: bool) -> Result<()> {
@@ -141,7 +141,7 @@ impl<'a> VmTranslator<'a> {
                     self.asm.extend(asm![
                     "Shared return subroutine"
                     ("$$RETURN")
-                        "Get the return address from 5 slots before the current local segment and store it in R14"
+                    "Get the return address from 5 slots before the current local segment and store it in R14"
                         @5
                         D=A
                         @LCL

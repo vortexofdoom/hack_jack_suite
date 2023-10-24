@@ -998,18 +998,6 @@ pub enum Asm<'a> {
     Asm(Instruction),
 }
 
-// trait Str<'a>: Into<Cow<'a, str>> {}
-
-// impl<'a> Str<'a> for &'a str {}
-// impl Str<'_> for String {}
-// impl<'a> Str<'a> for Cow<'a, str> {}
-
-// impl<'a, T: Str<'a>> From<T> for Asm<'a> {
-//     fn from(value: T) -> Self {
-//         Self::At(value.into())
-//     }
-// }
-
 impl From<i16> for Asm<'_> {
     #[allow(overflowing_literals)]
     fn from(value: i16) -> Self {
@@ -1200,22 +1188,10 @@ impl Assembler {
             "R13" => Some(13),
             "R14" => Some(14),
             "R15" => Some(15),
+            "SCREEN" => Some(0x4000),
+            "KBD" => Some(0x6000),
+            "MAX" => Some(i16::MAX),
             _ => self.labels.get(label).copied(),
-        }
-    }
-
-    fn parse_a_instruction<'a>(&mut self, input: &'a str) -> Asm<'a> {
-        match input.parse::<i16>() {
-            Ok(n) if n >= 0 => Asm::Asm(Instruction::from(n)),
-            // If the address given is not a valid positive signed 16-bit integer, interpret it as a variable
-            // Could also return an error, But I think most written assembly would not have intentionally numericized labels
-            _ => {
-                if self.get_label(input).is_none() {
-                    self.var_counter += 1;
-                    self.labels.insert(String::from(input), self.var_counter);
-                }
-                Asm::At(input.into())
-            }
         }
     }
 
@@ -1300,14 +1276,14 @@ impl Assembler {
         Ok(Asm::Asm(Instruction::c(dest, comp, jump)))
     }
 
-    pub fn translate<'a>(&mut self, input: &'a str) -> Result<Asm<'a>> {
-        // A or C instruction
-        if let Some(i) = input.strip_prefix('@') {
-            Ok(self.parse_a_instruction(i))
-        } else {
-            self.parse_c_instruction(input)
-        }
-    }
+    // pub fn translate<'a>(&mut self, input: &'a str) -> Result<Asm<'a>> {
+    //     // A or C instruction
+    //     if let Some(i) = input.strip_prefix('@') {
+    //         Ok(self.parse_a_instruction(i))
+    //     } else {
+    //         self.parse_c_instruction(input)
+    //     }
+    // }
 
     pub fn assemble(&mut self, asm: &[Asm]) -> Vec<Instruction> {
         // first pass
@@ -1324,7 +1300,16 @@ impl Assembler {
         }
         asm.iter()
             .filter_map(|c| match c {
-                Asm::At(l) => self.get_label(l.as_ref()).map(Instruction::from),
+                Asm::At(l) => l
+                    .parse::<i16>()
+                    .ok()
+                    .or_else(|| self.get_label(l))
+                    .or_else(|| {
+                        self.var_counter += 1;
+                        self.labels.insert(l.to_string(), self.var_counter);
+                        Some(self.var_counter)
+                    })
+                    .map(Instruction::from),
                 Asm::Asm(i) => Some(*i),
                 _ => None,
             })
@@ -1359,15 +1344,4 @@ impl Assembler {
 //         .map(|i| &input[..i])
 //         .unwrap_or(input)
 //         .replace(' ', "")
-// }
-
-// #[cfg(test)]
-// pub mod tests {
-//     use super::*;
-//     #[test]
-//     fn valid_c_bits() {
-//         let c_bits =
-//             Comp::try_from(Instruction::C_NO | Instruction::C_F | Instruction::C_ND).unwrap();
-//         assert_eq!(c_bits, Comp::DMinusA);
-//     }
 // }
