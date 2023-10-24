@@ -83,48 +83,71 @@ fn main() -> Result<(), String> {
 
     let mut assembler = Assembler::new();
 
-    let i = "i";
-    let address = "address";
-    const LOOP: &str = "LOOP";
-    const END: &str = "END";
     let asm = assembler.assemble(&asm_macro::asm![
-        @65
-        D=A
-        @R0
-        M=D
+    ("START")
+        @KBD
         D=M
-        @i
-        M=D
-
-        @SCREEN
-        D=A
-        @address
-        M=D
-
-    ("LOOP")
-        @i
-        D=M
-        @END
+        @"PRESS"
+        D;JNE
+        @"NO_PRESS"
         D;JEQ
 
-        @address
-        A=M
+    // fill = is_pressed ? -1 : 0
+    ("PRESS")
+        @"fill"
         M=-1
+        @"CHECK"
+        0;JMP
+    ("NO_PRESS")
+        @"fill"
+        M=0
 
-        @i
-        M=M-1
-        @32
+    // Only update screen if fill has changed since last fill
+    ("CHECK")
+        @"last"
+        D=M
+        @"fill"
+        D=D-M
+        @"START"
+        D;JEQ
+
+    // Initialize fill parameters
+        @8192
         D=A
-        @address
-        M=D+M
-        @LOOP
+        @"i"
+        M=D // i = 8192 
+        @SCREEN
+        D=A
+        @"address"
+        M=D // address = start of screen RAM
+        @"fill"
+        D=M
+        @"last"
+        M=D     // filling, so set last fill to current
+
+    ("FILL_LOOP")
+        @"i"
+        D=M
+        @"START"
+        D;JLE // while i > 0
+
+        @"fill"
+        D=M
+        @"address"
+        A=M
+        M=D // addr = fill
+
+        @"i"
+        M=M-1 // i--
+        @"address"
+        M=M+1 // addr++
+        @"FILL_LOOP"
         0;JMP
 
-    ("END")
-        @END
-        0;JMP
     ]);
 
+    let start = std::time::Instant::now();
+    let mut ticks = 0;
     'running: loop {
         if let Some(event) = event_pump.poll_event() {
             match event {
@@ -136,7 +159,11 @@ fn main() -> Result<(), String> {
             }
         }
         cpu.tick(&asm).map_err(|e| e.to_string())?;
+        ticks += 1;
     }
+
+    let elapsed = start.elapsed().as_millis();
+    println!("{}", ticks / elapsed);
 
     Ok(())
 }

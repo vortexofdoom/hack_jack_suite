@@ -9,7 +9,7 @@ use sdl2::{
 type Pixel = [u8; 3];
 
 const ON: Pixel = [0, 0, 0];
-const OFF: Pixel = [0, 0, 0];
+const OFF: Pixel = [255, 255, 255];
 
 pub struct Screen<'a> {
     canvas: Canvas<Window>,
@@ -44,10 +44,28 @@ const fn get_register(addr: i16) -> (i32, i32, u32, u32) {
 }
 
 pub fn as_pixels(value: i16) -> [u8; 48] {
-    let mut res = [0; 48];
+        
+    let mut res: [u8; 48] = [0; 48];
+    // res[0..3].copy_from_slice(if value & 1 == 0 { &OFF } else { &ON });
+    // res[3..6].copy_from_slice(if (value >> 1) & 1 == 0 { &OFF } else { &ON });
+    // res[6..9].copy_from_slice(if (value >> 2) & 1 == 0 { &OFF } else { &ON });
+    // res[9..12].copy_from_slice(if (value >> 3) & 1 == 0 { &OFF } else { &ON });
+    // res[12..15].copy_from_slice(if (value >> 4) & 1 == 0 { &OFF } else { &ON });
+    // res[15..18].copy_from_slice(if (value >> 5) & 1 == 0 { &OFF } else { &ON });
+    // res[18..21].copy_from_slice(if (value >> 6) & 1 == 0 { &OFF } else { &ON });
+    // res[21..24].copy_from_slice(if (value >> 7) & 1 == 0 { &OFF } else { &ON });
+    // res[24..27].copy_from_slice(if (value >> 8) & 1 == 0 { &OFF } else { &ON });
+    // res[27..30].copy_from_slice(if (value >> 9) & 1 == 0 { &OFF } else { &ON });
+    // res[30..33].copy_from_slice(if (value >> 10) & 1 == 0 { &OFF } else { &ON });
+    // res[33..36].copy_from_slice(if (value >> 11) & 1 == 0 { &OFF } else { &ON });
+    // res[36..39].copy_from_slice(if (value >> 12) & 1 == 0 { &OFF } else { &ON });
+    // res[39..42].copy_from_slice(if (value >> 13) & 1 == 0 { &OFF } else { &ON });
+    // res[42..45].copy_from_slice(if (value >> 14) & 1 == 0 { &OFF } else { &ON });
+    // res[45..48].copy_from_slice(if (value >> 15) & 1 == 0 { &OFF } else { &ON });
     for (i, p) in res.chunks_mut(3).enumerate() {
-        p.copy_from_slice(if value >> i == 0 { &OFF } else { &ON });
+        p.copy_from_slice(if (value >> i) & 1 == 1 { &ON } else { &OFF });
     }
+    // println!("{res:?}");
     res
 }
 

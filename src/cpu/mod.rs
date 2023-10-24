@@ -29,7 +29,7 @@ pub const THIS: i16 = 3;
 pub const THAT: i16 = 4;
 
 pub struct Cpu<'a> {
-    ram: [i16; 0xFFFF],
+    pub ram: [i16; 0xFFFF],
     rom: [Instruction; 0xFFFF],
     screen: Screen<'a>,
     pub(crate) pc: usize,
@@ -98,7 +98,7 @@ impl<'a> Cpu<'a> {
         //println!("{}", self.ram[KBD as usize]);
         let inst = asm[self.pc];
         //println!("Start: A: {} D: {} M: {} PC: {}", self.a, self.d, self.m(), self.pc);
-        println!("{inst}");
+        //println!("{inst}");
         self.pc += 1;
         match inst.get()? {
             // an address will always be an unsigned 15 bit integer, so can never overflow an i16.

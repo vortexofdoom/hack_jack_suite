@@ -1,1 +1,6 @@
 /target
+*.txt
+*.svg
+*.data
+*.old
+macros.rs
