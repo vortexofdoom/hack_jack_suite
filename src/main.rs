@@ -65,20 +65,22 @@ fn main() -> Result<(), String> {
         .build()
         .expect("Could not initialize window");
 
-    let canvas = window
+    let mut canvas = window
         .into_canvas()
         .build()
         .expect("Could not create canvas");
 
     let creator = canvas.texture_creator();
 
-    let texture = creator
+    let mut texture = creator
         .create_texture_streaming(Some(sdl2::pixels::PixelFormatEnum::RGB24), 512, 256)
         .expect("failed to create texture");
 
-    let screen = Screen::new(canvas, texture);
-    let mut cpu = Cpu::new(screen);
-
+    //let screen = Screen::new(canvas, texture);
+    let mut cpu = Cpu::new();
+    texture.update(None, cpu.screen(), 3 << 9).unwrap();
+    canvas.copy(&texture, None, None).unwrap();
+    canvas.present();
     let mut event_pump = sdl_context.event_pump()?;
 
     let mut assembler = Assembler::new();
@@ -146,9 +148,17 @@ fn main() -> Result<(), String> {
 
     ]);
 
-    let start = std::time::Instant::now();
+    let mut last_frame = std::time::Instant::now();
+    let start = last_frame;
     let mut ticks = 0;
     'running: loop {
+        if last_frame.elapsed().as_millis() >= 50 && cpu.screen_changed {
+            last_frame = std::time::Instant::now();
+            cpu.refresh(&mut texture);
+            canvas.copy(&texture, None, None)?;
+            //texture.update(None, cpu.screen(), 3 << 9).unwrap();
+            canvas.present();
+        }
         if let Some(event) = event_pump.poll_event() {
             match event {
                 Event::Quit { .. } => break 'running,
@@ -162,8 +172,8 @@ fn main() -> Result<(), String> {
         ticks += 1;
     }
 
-    let elapsed = start.elapsed().as_millis();
-    println!("{}", ticks / elapsed);
+    let elapsed = start.elapsed().as_secs_f64();
+    println!("{}", ticks as f64 / elapsed);
 
     Ok(())
 }

@@ -1,6 +1,7 @@
 use std::ops::RangeInclusive;
 
 use anyhow::{bail, Result};
+use sdl2::render::Texture;
 
 use crate::{
     asm::*,
@@ -28,26 +29,43 @@ pub const THIS: i16 = 3;
 /// This is `pointer 1` in the VM abstraction.
 pub const THAT: i16 = 4;
 
-pub struct Cpu<'a> {
+pub struct Cpu {
     pub ram: [i16; 0xFFFF],
     rom: [Instruction; 0xFFFF],
-    screen: Screen<'a>,
+    screen: Screen,
     pub(crate) pc: usize,
     d: i16,
     a: i16,
+    pub screen_changed: bool,
 }
 
 #[allow(overflowing_literals)]
-impl<'a> Cpu<'a> {
-    pub fn new(screen: Screen<'a>) -> Self {
+impl Cpu {
+    pub fn new() -> Self {
         Self {
             ram: [0; 0xFFFF],
             rom: [Instruction::from(0); 0xFFFF],
-            screen,
+            screen: Screen::new(),
             pc: 0,
             d: 0,
             a: 0,
+            screen_changed: false,
         }
+    }
+
+    pub const fn screen_changed(&self) -> bool {
+        self.screen.changed()
+    }
+
+    pub fn refresh(&mut self, texture: &mut Texture) {
+        for (i, word) in self.ram[0x4000..0x6000].iter().enumerate() {
+            self.screen.update(i, *word);
+        }
+        self.screen.refresh(texture)
+    }
+
+    pub const fn screen(&self) -> &[u8] {
+        &self.screen.data
     }
 
     #[inline]
@@ -141,11 +159,16 @@ impl<'a> Cpu<'a> {
                 }
                 // Do not allow writing to the KBD register
                 // Handle the M destination first to avoid writing to the wrong address.
-                if c.dest().m() && self.a != KBD {
+                if c.dest().m()
+                && self.a != KBD
+                && self.m() != comp {
                     // Check to see if the A register is pointing to an address in the screen
                     if SCREEN.contains(&self.a) {
+                        self.screen_changed = true;
                         //if let _a @ SCREEN_START..=SCREEN_END = self.a {
-                        self.screen.update(self.a, comp);
+                        // if self.at(self.a) != comp {
+                        //     self.screen.update(self.a, comp);
+                        // }
                         //println!("{}={}", self.a, comp);
                         //.expect("failed to update screen");
                     }
@@ -153,10 +176,12 @@ impl<'a> Cpu<'a> {
                 }
 
                 // The other destination bits are more permissive
-                if c.dest().a() {
+                if c.dest().a()
+                && self.a != comp {
                     self.a = comp;
                 }
-                if c.dest().d() {
+                if c.dest().d()
+                && self.d != comp {
                     self.d = comp;
                 }
             }
