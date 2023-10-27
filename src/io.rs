@@ -1,10 +1,37 @@
+use std::sync::OnceLock;
+
+use once_cell::unsync::Lazy;
 use sdl2::{
     keyboard::{KeyboardState, Keycode as K, Scancode},
     pixels::{Color, PixelFormatEnum},
     rect::Rect,
-    render::{Canvas, Texture},
+    render::{Canvas, Texture, RenderTarget},
     video::Window, surface::Surface,
 };
+
+static X_COORDS: OnceLock<Vec<i32>> = OnceLock::new();
+
+fn x_coord() -> &'static [i32] {
+    X_COORDS.get_or_init(|| {
+        let mut v = Vec::with_capacity(8192);
+        for i in 0x0000..0x2000 {
+            v.push((i % 32) * 16);
+        }
+        v
+    })
+}
+
+static Y_COORDS: OnceLock<Vec<i32>> = OnceLock::new();
+
+fn y_coord() -> &'static [i32] {
+    Y_COORDS.get_or_init(|| {
+        let mut v = Vec::with_capacity(8192);
+        for i in 0x0000..0x2000 {
+            v.push(i / 32);
+        }
+        v
+    })
+}
 
 type Pixel = [u8; 3];
 
@@ -27,6 +54,25 @@ impl Screen {
         let register = &mut self.data[addr..addr + 48];
         register.copy_from_slice(&as_pixels(value));
         self.changed = true;
+    }
+
+    pub fn render<R: RenderTarget>(data: &[i16], canvas: &mut Canvas<R>) {
+        canvas.set_draw_color(Color::WHITE);
+        canvas.clear();
+        canvas.set_draw_color(Color::BLACK);
+        for (i, word) in data.iter().enumerate() {
+            let (x, y) = (x_coord()[i], y_coord()[i]);
+            if *word == -1 {
+                canvas.draw_line((x, y), (x + 16, y)).unwrap();
+            } else {
+                for bit in 0..16 {
+                    if word & (1 << bit) == 1 {
+                        canvas.draw_point((x + bit as i32, y)).unwrap();
+                    }
+                }
+            }
+        }
+        canvas.present();
     }
 
     pub const fn changed(&self) -> bool {

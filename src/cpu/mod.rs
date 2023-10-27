@@ -1,7 +1,7 @@
 use std::ops::RangeInclusive;
 
 use anyhow::{bail, Result};
-use sdl2::render::Texture;
+use sdl2::render::{Texture, Canvas, RenderTarget};
 
 use crate::{
     asm::*,
@@ -62,6 +62,16 @@ impl Cpu {
             self.screen.update(i, *word);
         }
         self.screen.refresh(texture)
+    }
+
+    // pub fn refresh<R: RenderTarget>(&mut self, canvas: &mut Canvas<R>) {
+    //     for i in 0x4000..0x6000 {
+
+    //     }
+    // }
+
+    pub fn render<R: RenderTarget>(&self, canvas: &mut Canvas<R>) {
+        Screen::render(&self.ram[0x4000..0x6000], canvas);
     }
 
     pub const fn screen(&self) -> &[u8] {

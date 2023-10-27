@@ -154,6 +154,7 @@ fn main() -> Result<(), String> {
     'running: loop {
         if last_frame.elapsed().as_millis() >= 50 && cpu.screen_changed {
             last_frame = std::time::Instant::now();
+            //cpu.render(&mut canvas);
             cpu.refresh(&mut texture);
             canvas.copy(&texture, None, None)?;
             //texture.update(None, cpu.screen(), 3 << 9).unwrap();
