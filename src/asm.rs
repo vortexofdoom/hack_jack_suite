@@ -179,7 +179,6 @@ pub enum Comp {
 pub enum CBits {
     /********************************************
     *   Official ALU computations
-    *
     *********************************************/
     /// The specified C-bit configuration evaluating to `0`
     /// 
@@ -273,7 +272,6 @@ pub enum CBits {
 
     /********************************************
     *   Unofficial (duplicate) computations
-    *
     *********************************************/
 
     /// An unspecified C-bit configuration evaluating to `0`
@@ -440,7 +438,6 @@ pub enum CBits {
 
     /********************************************
     *   The dark corners of the ALU
-    *
     *********************************************/
 
     /// An unspecified C-bit configuration evaluating to `!D|!A`
@@ -518,7 +515,7 @@ pub enum CBits {
 ///
 /// If not set, the value in the `A` register is passed in as the second input.
 ///
-/// If set, the value at `Memory[A]` is passed in instead.
+/// If set, the value at `Memory[A]`, otherwise known as `M` is passed in instead.
 #[bitenum(u1, exhaustive: true)]
 #[derive(Debug, PartialEq)]
 pub enum Mode {
@@ -681,7 +678,7 @@ pub enum NonAInst {
 
 /// These enums are for specifying valid bit configurations for Hack instruction types
 /// All C instructions have the 3 most significant bits set, and all A instructions have the most significant bit clear
-#[bitenum(u1: exhaustive: false)]
+#[bitenum(u1, exhaustive: false)]
 pub enum AInst {
     A = 0,
 }
@@ -741,7 +738,6 @@ pub struct CInstruction {
 /// If niche optimizations for the `arbitrary-int` crate are implemented,
 /// this pattern could potentially replace the `Instruction` struct as a wrapper around the full valid instructions,
 /// but as is these take up 4 bytes instead of 2.
-#[repr(u16)]
 pub enum InstructionType {
     A(u15),
     C(CInstruction),
@@ -901,7 +897,7 @@ impl Instruction {
      *******************************************************************************/
     /// The screen of the Hack platform is hardware-mapped to the address range `0x4000..=0x5FFF`
     ///
-    /// The 1bpp screen is displayed least significant bit to most significant bit from left to right
+    /// Each 16 bit word in the 1bpp screen is displayed least significant bit to most significant bit from left to right
     pub const SCREEN: Self = Self { raw_value: 16384 };
 
     /// The keyboard is hardware-mapped to the address 24576
@@ -1169,7 +1165,6 @@ impl Assembler {
     }
 
     // Helper function to abstract over checking the static list first, then the labels unique to this assembly
-    #[inline]
     fn get_label(&mut self, label: &str) -> Option<i16> {
         match label {
             "SP" | "R0" => Some(0),
@@ -1276,21 +1271,11 @@ impl Assembler {
         Ok(Asm::Asm(Instruction::c(dest, comp, jump)))
     }
 
-    // pub fn translate<'a>(&mut self, input: &'a str) -> Result<Asm<'a>> {
-    //     // A or C instruction
-    //     if let Some(i) = input.strip_prefix('@') {
-    //         Ok(self.parse_a_instruction(i))
-    //     } else {
-    //         self.parse_c_instruction(input)
-    //     }
-    // }
-
     pub fn assemble(&mut self, asm: &[Asm]) -> Vec<Instruction> {
         // first pass
         let mut line: i16 = 0;
         for com in asm {
             if let Asm::Label(s) = com {
-                //println!("({com})");
                 if self.get_label(s).is_none() {
                     self.labels.insert(s.to_string(), line);
                 }
@@ -1302,6 +1287,7 @@ impl Assembler {
             .filter_map(|c| match c {
                 Asm::At(l) => l
                     .parse::<i16>()
+                    .or_else(|_| i16::from_str_radix(l, 16))
                     .ok()
                     .or_else(|| self.get_label(l))
                     .or_else(|| {

@@ -1,87 +1,27 @@
-use std::sync::OnceLock;
-
-use once_cell::unsync::Lazy;
 use sdl2::{
     keyboard::{KeyboardState, Keycode as K, Scancode},
-    pixels::{Color, PixelFormatEnum},
     rect::Rect,
-    render::{Canvas, Texture, RenderTarget},
-    video::Window, surface::Surface,
 };
 
-static X_COORDS: OnceLock<Vec<i32>> = OnceLock::new();
-
-fn x_coord() -> &'static [i32] {
-    X_COORDS.get_or_init(|| {
-        let mut v = Vec::with_capacity(8192);
-        for i in 0x0000..0x2000 {
-            v.push((i % 32) * 16);
-        }
-        v
-    })
-}
-
-static Y_COORDS: OnceLock<Vec<i32>> = OnceLock::new();
-
-fn y_coord() -> &'static [i32] {
-    Y_COORDS.get_or_init(|| {
-        let mut v = Vec::with_capacity(8192);
-        for i in 0x0000..0x2000 {
-            v.push(i / 32);
-        }
-        v
-    })
-}
-
 type Pixel = [u8; 3];
+pub const PIXEL_REGISTER_BYTES: usize = 48;
+pub const SCREEN_ROW_BYTES: usize = 3 << 9;
 
+/// The Hack screen
 const ON: Pixel = [0, 0, 0];
 const OFF: Pixel = [255, 255, 255];
 
-pub struct Screen {
-    changed: bool,
-    pub(crate) data: [u8; 512 * 256 * 3],
-    //canvas: Canvas<Window>,
-    //texture: Texture<'a>,
+pub struct ScreenUpdate {
+    pub rect: Rect,
+    pub pixels: [u8; 48],
 }
-impl Screen {
-    pub fn new() -> Self {
-        Self { changed: true, data: [255; 512 * 256 * 3]}
-    }
 
-    pub fn update(&mut self, addr: usize, value: i16) {
-        let addr = addr * 3 * 16;
-        let register = &mut self.data[addr..addr + 48];
-        register.copy_from_slice(&as_pixels(value));
-        self.changed = true;
-    }
-
-    pub fn render<R: RenderTarget>(data: &[i16], canvas: &mut Canvas<R>) {
-        canvas.set_draw_color(Color::WHITE);
-        canvas.clear();
-        canvas.set_draw_color(Color::BLACK);
-        for (i, word) in data.iter().enumerate() {
-            let (x, y) = (x_coord()[i], y_coord()[i]);
-            if *word == -1 {
-                canvas.draw_line((x, y), (x + 16, y)).unwrap();
-            } else {
-                for bit in 0..16 {
-                    if word & (1 << bit) == 1 {
-                        canvas.draw_point((x + bit as i32, y)).unwrap();
-                    }
-                }
-            }
+impl ScreenUpdate {
+    pub(crate) fn new(addr: i16, value: i16) -> Self {
+        Self {
+            rect: get_register(addr).into(),
+            pixels: as_pixels(value),
         }
-        canvas.present();
-    }
-
-    pub const fn changed(&self) -> bool {
-        self.changed
-    }
-
-    pub fn refresh(&mut self, texture: &mut Texture) {
-        texture.update(None, &self.data, 3 << 9).unwrap();
-        self.changed = false;
     }
 }
 
@@ -92,7 +32,8 @@ const fn get_register(addr: i16) -> (i32, i32, u32, u32) {
     (col, row, 16, 1)
 }
 
-pub fn as_pixels(value: i16) -> [u8; 48] {
+// TODO: This can be optimized and maaaaybe even const somehow
+fn as_pixels(value: i16) -> [u8; 48] {
     match value {
         0 => [255; 48],
         -1 => [0; 48],
@@ -101,11 +42,9 @@ pub fn as_pixels(value: i16) -> [u8; 48] {
             for (i, p) in res.chunks_mut(3).enumerate() {
                 p.copy_from_slice(if (value >> i) & 1 == 1 { &ON } else { &OFF });
             }
-            // println!("{res:?}");
             res
         }
     }
-        
 }
 
 pub(crate) fn get_key(kbd: KeyboardState) -> i16 {
@@ -253,8 +192,8 @@ pub mod tests {
     #[test]
     fn test_registers() {
         assert_eq!(PixelFormatEnum::RGB24.byte_size_per_pixel(), 3);
-        assert_eq!(get_register(0x4000), (0, 0, 16, 1));
-        assert_eq!(get_register(0x4001), (16, 0, 16, 1));
-        assert_eq!(get_register(0x5FFF), (512 - 16, 255, 16, 1));
+        assert_eq!(get_register(0x4000), (0, 0, 16, 1).into());
+        assert_eq!(get_register(0x4001), (16, 0, 16, 1).into());
+        assert_eq!(get_register(0x5FFF), (512 - 16, 255, 16, 1).into());
     }
 }

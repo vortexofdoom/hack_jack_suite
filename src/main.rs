@@ -14,8 +14,8 @@ use asm::Assembler;
 //use crate::jack_compiler::compilation_engine::CompilationEngine;
 use clap::{Args, Parser, Subcommand};
 use cpu::Cpu;
-use io::{get_key, Screen};
-use sdl2::event::Event;
+use io::{get_key, SCREEN_ROW_BYTES};
+use sdl2::{event::Event, pixels::Color};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -60,7 +60,7 @@ fn main() -> Result<(), String> {
     let video_subsys = sdl_context.video()?;
 
     let window = video_subsys
-        .window("Hack Emulator", 512, 256)
+        .window("Hack Emulator", 1024, 512)
         .position_centered()
         .build()
         .expect("Could not initialize window");
@@ -70,18 +70,15 @@ fn main() -> Result<(), String> {
         .build()
         .expect("Could not create canvas");
 
+    canvas.set_logical_size(512, 256).expect("Could not set logical size");
+
     let creator = canvas.texture_creator();
 
-    let mut texture = creator
+    let mut screen = creator
         .create_texture_streaming(Some(sdl2::pixels::PixelFormatEnum::RGB24), 512, 256)
         .expect("failed to create texture");
 
     //let screen = Screen::new(canvas, texture);
-    let mut cpu = Cpu::new();
-    texture.update(None, cpu.screen(), 3 << 9).unwrap();
-    canvas.copy(&texture, None, None).unwrap();
-    canvas.present();
-    let mut event_pump = sdl_context.event_pump()?;
 
     let mut assembler = Assembler::new();
 
@@ -117,7 +114,7 @@ fn main() -> Result<(), String> {
         @8192
         D=A
         @"i"
-        M=D // i = 8192 
+        M=D // i = 8192
         @SCREEN
         D=A
         @"address"
@@ -148,17 +145,18 @@ fn main() -> Result<(), String> {
 
     ]);
 
+    canvas.set_draw_color(Color::WHITE);
+    canvas.fill_rect(None)?;
+    canvas.present();
+    let mut cpu = Cpu::new(&asm);
+    let mut event_pump = sdl_context.event_pump()?;
     let mut last_frame = std::time::Instant::now();
-    let start = last_frame;
     let mut ticks = 0;
+    let start = last_frame;
     'running: loop {
-        if last_frame.elapsed().as_millis() >= 50 && cpu.screen_changed {
-            last_frame = std::time::Instant::now();
-            //cpu.render(&mut canvas);
-            cpu.refresh(&mut texture);
-            canvas.copy(&texture, None, None)?;
-            //texture.update(None, cpu.screen(), 3 << 9).unwrap();
+        if last_frame.elapsed().as_millis() >= 50 {
             canvas.present();
+            last_frame = std::time::Instant::now();
         }
         if let Some(event) = event_pump.poll_event() {
             match event {
@@ -169,10 +167,14 @@ fn main() -> Result<(), String> {
                 _ => {}
             }
         }
-        cpu.tick(&asm).map_err(|e| e.to_string())?;
+        if let Some(update) = cpu.tick().map_err(|e| e.to_string())? {
+            screen
+                .update(update.rect, &update.pixels, SCREEN_ROW_BYTES)
+                .map_err(|e| e.to_string())?;
+            canvas.copy(&screen, update.rect, update.rect)?;
+        }
         ticks += 1;
     }
-
     let elapsed = start.elapsed().as_secs_f64();
     println!("{}", ticks as f64 / elapsed);
 

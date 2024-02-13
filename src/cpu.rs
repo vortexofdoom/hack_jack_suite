@@ -1,11 +1,10 @@
 use std::ops::RangeInclusive;
 
-use anyhow::{bail, Result};
-use sdl2::render::{Texture, Canvas, RenderTarget};
+use anyhow::Result;
 
 use crate::{
     asm::*,
-    io::Screen,
+    io::ScreenUpdate,
     //code_writer::assembler::{Comp, Instruction},
     vm::{MemSegment as Seg, VmCommand},
 };
@@ -29,76 +28,42 @@ pub const THIS: i16 = 3;
 /// This is `pointer 1` in the VM abstraction.
 pub const THAT: i16 = 4;
 
-pub struct Cpu {
+pub struct Cpu<'a> {
     pub ram: [i16; 0xFFFF],
-    rom: [Instruction; 0xFFFF],
-    screen: Screen,
+    rom: &'a [Instruction],
     pub(crate) pc: usize,
     d: i16,
     a: i16,
-    pub screen_changed: bool,
 }
 
 #[allow(overflowing_literals)]
-impl Cpu {
-    pub fn new() -> Self {
+impl<'a> Cpu<'a> {
+    pub fn new(asm: &'a [Instruction]) -> Self {
         Self {
             ram: [0; 0xFFFF],
-            rom: [Instruction::from(0); 0xFFFF],
-            screen: Screen::new(),
+            rom: asm,
             pc: 0,
             d: 0,
             a: 0,
-            screen_changed: false,
         }
     }
 
-    pub const fn screen_changed(&self) -> bool {
-        self.screen.changed()
-    }
-
-    pub fn refresh(&mut self, texture: &mut Texture) {
-        for (i, word) in self.ram[0x4000..0x6000].iter().enumerate() {
-            self.screen.update(i, *word);
-        }
-        self.screen.refresh(texture)
-    }
-
-    // pub fn refresh<R: RenderTarget>(&mut self, canvas: &mut Canvas<R>) {
-    //     for i in 0x4000..0x6000 {
-
-    //     }
-    // }
-
-    pub fn render<R: RenderTarget>(&self, canvas: &mut Canvas<R>) {
-        Screen::render(&self.ram[0x4000..0x6000], canvas);
-    }
-
-    pub const fn screen(&self) -> &[u8] {
-        &self.screen.data
-    }
-
-    #[inline]
     const fn m(&self) -> i16 {
         self.ram[self.a as u16 as usize]
     }
 
-    #[inline]
     fn m_mut(&mut self) -> &mut i16 {
         &mut self.ram[self.a as u16 as usize]
     }
 
-    #[inline]
     const fn at(&self, addr: i16) -> i16 {
         self.ram[addr as usize]
     }
 
-    #[inline]
     fn at_mut(&mut self, addr: i16) -> &mut i16 {
         &mut self.ram[addr as u16 as usize]
     }
 
-    #[inline]
     const fn a_comp(&self, mode: Mode) -> i16 {
         match mode {
             Mode::A => self.a,
@@ -106,12 +71,10 @@ impl Cpu {
         }
     }
 
-    #[inline]
     fn sp(&mut self) -> &mut i16 {
         self.at_mut(0)
     }
 
-    #[inline]
     fn stack_top(&mut self) -> &mut i16 {
         let sp = *self.sp();
         self.at_mut(sp)
@@ -121,13 +84,40 @@ impl Cpu {
         self.ram[KBD as usize] = kbd;
     }
 
-    pub fn tick(&mut self, asm: &[Instruction]) -> Result<()> {
+    const fn get_comp(&self, comp: CompBits) -> i16 {
+        let a_comp = match comp.mode() {
+            Mode::A => self.a,
+            Mode::M => self.m(),
+        };
+
+        match comp.c_bits() {
+            CBits::Zero => 0,
+            CBits::One => 1,
+            CBits::NegOne => -1,
+            CBits::D => self.d,
+            CBits::A => a_comp,
+            CBits::NotD => !self.d,
+            CBits::NotA => !a_comp,
+            CBits::NegD => -self.d,
+            CBits::NegA => -a_comp,
+            CBits::DPlusOne => self.d.wrapping_add(1),
+            CBits::APlusOne => a_comp.wrapping_add(1),
+            CBits::DMinusOne => self.d.wrapping_sub(1),
+            CBits::AMinusOne => a_comp.wrapping_sub(1),
+            CBits::DPlusA => self.d.wrapping_add(a_comp),
+            CBits::DMinusA => self.d.wrapping_sub(a_comp),
+            CBits::AMinusD => a_comp.wrapping_sub(self.d),
+            CBits::DAndA => self.d & a_comp,
+            CBits::DOrA => self.d | a_comp,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn tick(&mut self) -> Result<Option<ScreenUpdate>> {
         use InstructionType as Inst;
-        //println!("{}", self.ram[KBD as usize]);
-        let inst = asm[self.pc];
-        //println!("Start: A: {} D: {} M: {} PC: {}", self.a, self.d, self.m(), self.pc);
-        //println!("{inst}");
+        let inst = self.rom[self.pc];
         self.pc += 1;
+        let mut rect = None;
         match inst.get()? {
             // an address will always be an unsigned 15 bit integer, so can never overflow an i16.
             Inst::A(addr) => {
@@ -135,28 +125,7 @@ impl Cpu {
             }
             Inst::C(c) => {
                 // get a reference to the A or M register
-                let a_comp = self.a_comp(c.comp().mode());
-                let comp = match c.comp().c_bits() {
-                    CBits::Zero => 0,
-                    CBits::One => 1,
-                    CBits::NegOne => -1,
-                    CBits::D => self.d,
-                    CBits::A => a_comp,
-                    CBits::NotD => !self.d,
-                    CBits::NotA => !a_comp,
-                    CBits::NegD => -self.d,
-                    CBits::NegA => -a_comp,
-                    CBits::DPlusOne => self.d.wrapping_add(1),
-                    CBits::APlusOne => a_comp.wrapping_add(1),
-                    CBits::DMinusOne => self.d.wrapping_sub(1),
-                    CBits::AMinusOne => a_comp.wrapping_sub(1),
-                    CBits::DPlusA => self.d.wrapping_add(a_comp),
-                    CBits::DMinusA => self.d.wrapping_sub(a_comp),
-                    CBits::AMinusD => a_comp.wrapping_sub(self.d),
-                    CBits::DAndA => self.d & a_comp,
-                    CBits::DOrA => self.d | a_comp,
-                    _ => bail!("Invalid C Bits"),
-                };
+                let comp = self.get_comp(c.comp());
 
                 // Calculate jump before updating registers from destination
                 // Not doing this is the cause of the official CPU emulator bug
@@ -169,35 +138,24 @@ impl Cpu {
                 }
                 // Do not allow writing to the KBD register
                 // Handle the M destination first to avoid writing to the wrong address.
-                if c.dest().m()
-                && self.a != KBD
-                && self.m() != comp {
+                if c.dest().m() && self.a != KBD && self.m() != comp {
                     // Check to see if the A register is pointing to an address in the screen
-                    if SCREEN.contains(&self.a) {
-                        self.screen_changed = true;
-                        //if let _a @ SCREEN_START..=SCREEN_END = self.a {
-                        // if self.at(self.a) != comp {
-                        //     self.screen.update(self.a, comp);
-                        // }
-                        //println!("{}={}", self.a, comp);
-                        //.expect("failed to update screen");
+                    if SCREEN.contains(&self.a) && self.m() != comp {
+                        rect = Some(ScreenUpdate::new(self.a, comp));
                     }
                     *self.m_mut() = comp;
                 }
 
                 // The other destination bits are more permissive
-                if c.dest().a()
-                && self.a != comp {
+                if c.dest().a() {
                     self.a = comp;
                 }
-                if c.dest().d()
-                && self.d != comp {
+                if c.dest().d() {
                     self.d = comp;
                 }
             }
         }
-        //println!("End: A: {} D: {} M: {} PC: {}", self.a, self.d, self.m(), self.pc);
-        Ok(())
+        Ok(rect)
     }
 
     /// Sets the D register to the current stack top, and decrements the stack pointer
@@ -252,10 +210,7 @@ impl Cpu {
             }
             VmCommand::Label(_) => todo!(),
             VmCommand::Goto(_) => todo!(),
-            VmCommand::IfGoto(_) => todo!(),
-            VmCommand::Function(_, _) => todo!(),
-            VmCommand::Call(_, _) => todo!(),
-            VmCommand::Return => todo!(),
+            _ => todo!(),
         }
     }
 }
