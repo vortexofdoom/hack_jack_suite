@@ -17,17 +17,21 @@ can become:
 `@n`
 `D=<op>A`
 
-
-If an unconditional jump (`_;JMP`) is followed by `@SP`, it can be changed to `A=0;JMP` to save an instruction, as long as the emulator works to the hardware specification (ie. `A` and `M` registers update *after* the jump).
-
 which saves the 3 instructions of a unary op
 (TODO: I think unary ops can be entirely optimized out in asm)
 
-If you assume that the value at the top of the stack will be loaded into `D` after a push (which is a fairly safe assumption)
+If an unconditional jump (`_;JMP`) is followed by `@SP`, it can be changed to `A=0;JMP` to save an instruction, as long as the emulator works to the hardware specification (ie. `A` and `M` registers update *after* the jump).
+
+If we guarantee that the value at the top of the stack will be loaded into `D` after a push (which is a fairly safe assumption)
 `push constant n`
 `<binary op>`
 
 can become:
 `@n`
 `D=D<op>A`
+
+Instruction combinations like
+`push argument 0`
+`pop argument 0`
+can be omitted entirely.
 

@@ -1,5 +1,4 @@
-// pub(crate) mod asm_writer;
-//pub(crate) mod assembler;
+pub(crate) mod asm_writer;
 pub(crate) mod vm_writer;
 pub(crate) mod xml_writer;
 

@@ -3,13 +3,13 @@ use sdl2::{
     rect::Rect,
 };
 
-type Pixel = [u8; 3];
 pub const PIXEL_REGISTER_BYTES: usize = 48;
 pub const SCREEN_ROW_BYTES: usize = 3 << 9;
+pub const SCREEN_PIXELS: usize = 256 * 512 * 3;
 
 /// The Hack screen
-const ON: Pixel = [0, 0, 0];
-const OFF: Pixel = [255, 255, 255];
+pub const ON: u8 = 0;
+pub const OFF: u8 = 255;
 
 pub struct ScreenUpdate {
     pub rect: Rect,
@@ -32,6 +32,7 @@ const fn get_register(addr: i16) -> (i32, i32, u32, u32) {
     (col, row, 16, 1)
 }
 
+
 // TODO: This can be optimized and maaaaybe even const somehow
 fn as_pixels(value: i16) -> [u8; 48] {
     match value {
@@ -40,7 +41,7 @@ fn as_pixels(value: i16) -> [u8; 48] {
         _ => {
             let mut res: [u8; 48] = [0; 48];
             for (i, p) in res.chunks_mut(3).enumerate() {
-                p.copy_from_slice(if (value >> i) & 1 == 1 { &ON } else { &OFF });
+                p.copy_from_slice(if (value >> i) & 1 == 1 { &[ON; 3] } else { &[OFF; 3] });
             }
             res
         }

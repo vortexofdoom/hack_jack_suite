@@ -89,39 +89,52 @@ impl<'a> VmTranslator<'a> {
     }
 
     /// Naively generates assembly on demand per VM Command.
-    #[rustfmt::skip]
+
     fn generate_asm(&mut self, command: VmCommand<'a>, comment: bool) -> Result<()> {
         if comment {
-           self.asm.push(asm!("{command}"));
+            self.asm.push(asm!("{command}"));
         }
 
         match command {
-            VmCommand::Add => self.binary_op(asm!(M=D+M)),
-            VmCommand::Sub => self.binary_op(asm!(M=M-D)),
-            VmCommand::Neg => self.unary_op(asm!(M=-M)),
+            VmCommand::Add => self.binary_op(asm!(M = D + M)),
+            VmCommand::Sub => self.binary_op(asm!(M = M - D)),
+            VmCommand::Neg => self.unary_op(asm!(M = -M)),
             VmCommand::Compare(comp) => self.comparison(comp),
-            VmCommand::And => self.binary_op(asm!(M=D&M)),
-            VmCommand::Or => self.binary_op(asm!(M=D|M)),
-            VmCommand::Not => self.unary_op(asm!(M=!M)),
-            VmCommand::Push(seg, n) => {
-                match seg {
-                    Seg::Argument => self.push_segment("ARG", n),
-                    Seg::Local => self.push_segment("LCL", n),
-                    Seg::This => self.push_segment("THIS", n),
-                    Seg::That => self.push_segment("THAT", n),
-                    Seg::Static => self.push_value(format!("{}.{n}", self.filename), Mode::M),
-                    Seg::Pointer => self.push_value(if n == 0 { "THIS" } else { "THAT" }, Mode::M),
-                    Seg::Temp => self.push_value(asm!(@"R{n}"), Mode::M),
-                    Seg::Constant => self.push_constant(n),
+            VmCommand::And => self.binary_op(asm!(M = D & M)),
+            VmCommand::Or => self.binary_op(asm!(M = D | M)),
+            VmCommand::Not => self.unary_op(asm!(M = !M)),
+            VmCommand::Push(seg, n) => match seg {
+                Seg::Argument => self.push_segment(Asm::ARG, n),
+                Seg::Local => self.push_segment(Asm::LCL, n),
+                Seg::This => self.push_segment(Asm::THIS, n),
+                Seg::That => self.push_segment(Asm::THAT, n),
+                Seg::Static => self.push_value(format!("{}.{n}", self.filename), Mode::M),
+                Seg::Pointer => {
+                    self.push_value(if n == 0 { Asm::THIS } else { Asm::THAT }, Mode::M)
                 }
-            }
+                Seg::Temp => {
+                    let reg = match n {
+                        0 => Asm::R5,
+                        1 => Asm::R6,
+                        2 => Asm::R7,
+                        3 => Asm::R8,
+                        4 => Asm::R9,
+                        5 => Asm::R10,
+                        6 => Asm::R11,
+                        7 => Asm::R12,
+                        _ => bail!("Unsupported temp register {n}"),
+                    };
+                    self.push_value(reg, Mode::M)
+                }
+                Seg::Constant => self.push_constant(n),
+            },
             VmCommand::Pop(seg, n) => match seg {
-                Seg::Argument => self.pop_segment("ARG", n),
-                Seg::Local => self.pop_segment("LCL", n),
-                Seg::This => self.pop_segment("THIS", n),
-                Seg::That => self.pop_segment("THAT", n),
+                Seg::Argument => self.pop_segment(Asm::ARG, n),
+                Seg::Local => self.pop_segment(Asm::LCL, n),
+                Seg::This => self.pop_segment(Asm::THIS, n),
+                Seg::That => self.pop_segment(Asm::THAT, n),
                 Seg::Static => self.pop_value(format!("{}.{n}", self.filename)),
-                Seg::Pointer => self.pop_value(if n == 0 { "THIS" } else { "THAT" }),
+                Seg::Pointer => self.pop_value(if n == 0 { Asm::THIS } else { Asm::THAT }),
                 Seg::Temp => self.pop_value(Asm::At(Cow::Owned(format!("R{}", n + 5)))),
                 _ => bail!("cannot pop to constant"),
             },
@@ -130,7 +143,6 @@ impl<'a> VmTranslator<'a> {
             VmCommand::IfGoto(l) => self.if_goto(format!("{}${}", self.curr_func, l)),
             VmCommand::Function(f, n) => self.func(f, n),
             VmCommand::Call(f, n) => self.call_func(f, n),
-
             VmCommand::Return => {
                 if self.return_written {
                     self.asm.extend(asm![
@@ -210,12 +222,13 @@ impl<'a> VmTranslator<'a> {
         // making our comp_count into a simple identifier for formatting with the macro more easily
         let counter = self.comp_count;
         self.comp_count += 1;
+        let end_comp = format!("END_COMP{counter}");
 
         // Computes the difference between the two values at the top of the stack
         self.binary_op(asm!(MD = M - D));
 
         self.asm.extend(vec![
-            asm!(@"END_COMP{counter}"),
+            asm!(@end_comp),
             match comparison {
                 Cmp::EQ => asm!(D;JNE),
                 Cmp::GT => asm!(D;JLE),
@@ -229,7 +242,7 @@ impl<'a> VmTranslator<'a> {
 
         self.asm.extend(asm![
             D=D+1
-        ("END_COMP{counter}")
+        (end_comp)
             @SP
             A=M-1
             M=M-D
@@ -251,7 +264,7 @@ impl<'a> VmTranslator<'a> {
     }
 
     // local, argument, this, that
-    pub fn push_segment<T: Display>(&mut self, segment: T, n: i16) {
+    pub fn push_segment(&mut self, segment: impl Display, n: i16) {
         self.segment(segment, n);
 
         self.asm.extend(asm![
@@ -262,7 +275,7 @@ impl<'a> VmTranslator<'a> {
         self.push();
     }
 
-    pub fn segment<T: Display>(&mut self, segment: T, n: i16) {
+    pub fn segment(&mut self, segment: impl Display, n: i16) {
         self.asm
             .extend([Asm::from(n), asm!(D = A), asm!(@"{segment}")]);
     }
@@ -303,6 +316,7 @@ impl<'a> VmTranslator<'a> {
                 // Get the last entry in the asm vector
                 let idx = self.asm.len() - 1;
                 self.asm[idx] = match v {
+                    // TODO: Add support for -2 under optimization
                     -1 => asm!(M = -1),
                     0 => asm!(M = 0),
                     1 => asm!(M = 1),
@@ -312,8 +326,6 @@ impl<'a> VmTranslator<'a> {
             v => {
                 // If the constant to be pushed is negative, we can use an A instruction and a bitwise negation to push it
                 // This works for even -32768 which is why we do it instead of arithmetic negation
-                // If readability is important, -32768 could be special cased and the rest could use arithmetic negation
-                // This is a purely internal optimization, although the VM parser could be made to support negative constants
                 // `push constant n`
                 // `neg/not`
                 if var < 0 {

@@ -282,10 +282,7 @@ where
     "
     )
 }
-pub fn pop_segment<T>(segment: T, n: i16) -> String
-where
-    T: Display,
-{
+pub fn pop_segment(segment: impl Display, n: i16) -> String {
     format!(
         "\
     @{n}
@@ -301,11 +298,8 @@ where
     )
 }
 // static, pointer, constant (push only)
-fn push_value<T>(var: T, use_a_over_m: bool) -> String
-where
-    T: Display,
-{
-    let comp_a_or_m = if use_a_over_m { 'A' } else { 'M' };
+fn push_value(var: impl Display, use_a_over_m: bool) -> String {
+    let comp_a_or_m = if use_a_over_m { asm!(D=A) } else { asm!(D=M) };
     format!(
         "\
     @{var}
@@ -371,7 +365,7 @@ fn func(fn_name: &str, n_vars: i16) -> String {
     @{n_vars}
     D=A
     @SP
-    AM=D+M
+    M=D+M
     D=D-1
 ({fn_name}$LocalLoop)
     @{fn_name}$LocalLoopEnd

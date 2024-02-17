@@ -443,7 +443,7 @@ pub enum CBits {
     /// An unspecified C-bit configuration evaluating to `!D|!A`
     /// 
     /// `!(D & A)`
-    NotDOrNotA      = 0b000001,
+    DNandA      = 0b000001,
 
     /// An unspecified C-bit configuration evaluating to `!(D + A)`
     /// 
@@ -467,7 +467,7 @@ pub enum CBits {
 
     /// An unspecified C-bit configuration evaluating to `!D & A`
     /// 
-    /// `D & A`
+    /// `!D & A`
     NotDAndA        = 0b010000,
 
     /// An unspecified C-bit configuration evaluating to `D | !A`
@@ -483,7 +483,7 @@ pub enum CBits {
     /// An unspecified C-bit configuration evaluating to `!D & !A`
     /// 
     /// `!D & !A`
-    NotDAndNotA     = 0b010100,
+    DNorA     = 0b010100,
 
     /// An unspecified C-bit configuration evaluating to `!D + !A`
     /// 
@@ -547,6 +547,12 @@ pub(crate) struct CompBits {
     mode: Mode,
     #[bits(0..=5, rw)]
     c_bits: CBits,
+}
+
+impl From<Comp> for CompBits {
+    fn from(value: Comp) -> Self {
+        Self { raw_value: 0 }.with_comp(value)
+    }
 }
 
 impl CompBits {
@@ -1037,7 +1043,7 @@ impl std::fmt::Display for Asm<'_> {
         }
     }
 }
-impl Asm<'static> {
+impl Asm<'_> {
     /// The address of the stack pointer is always held at address 0.
     ///
     /// In the official specification, the stack pointer is one past the top of the stack,
@@ -1265,6 +1271,11 @@ impl Assembler {
             "D-M" => Comp::DMinusM,
             "A-D" => Comp::AMinusD,
             "M-D" => Comp::MMinusD,
+            x if x.starts_with('X') => {
+                // Support unofficial comp configurations by using Xnn, where nn is the 2 digit hex representation
+                // of the configuration in question.
+                Comp::A
+            }
             _ => bail!("invalid or unsupported computation field"),
         };
 

@@ -1,4 +1,4 @@
-use std::ops::RangeInclusive;
+use std::ops::{Index, RangeInclusive};
 
 use anyhow::Result;
 
@@ -16,17 +16,27 @@ const SCREEN: RangeInclusive<i16> = 0x4000..=0x5FFF;
 const LCL: i16 = 1;
 
 /// The address of the current frame's `argument` memory segment is stored at address 2.
-pub const ARG: i16 = 2;
+const ARG: i16 = 2;
 
 /// The address of the current frame's `this` memory segment is stored at address 3.
 ///
 /// This is `pointer 0` in the VM abstraction.
-pub const THIS: i16 = 3;
+const THIS: i16 = 3;
 
 /// The address of the current frame's `that` memory segment is stored at address 4.
 ///
 /// This is `pointer 1` in the VM abstraction.
-pub const THAT: i16 = 4;
+const THAT: i16 = 4;
+
+struct Ram([i16; 0xFFFF]);
+
+impl Index<i16> for Ram {
+    type Output = i16;
+
+    fn index(&self, index: i16) -> &Self::Output {
+        todo!()
+    }
+}
 
 pub struct Cpu<'a> {
     pub ram: [i16; 0xFFFF],
@@ -46,6 +56,12 @@ impl<'a> Cpu<'a> {
             d: 0,
             a: 0,
         }
+    }
+
+    pub const fn get_pixel(&self, x: usize, y: usize) -> bool {
+        let offset = x & 15;
+        let addr = SCREEN_START as usize + (x / 16) + (y * 32);
+        self.ram[addr] & (1 << (15 - offset)) != 0
     }
 
     const fn m(&self) -> i16 {
@@ -109,11 +125,50 @@ impl<'a> Cpu<'a> {
             CBits::AMinusD => a_comp.wrapping_sub(self.d),
             CBits::DAndA => self.d & a_comp,
             CBits::DOrA => self.d | a_comp,
-            _ => unreachable!(),
+            // Unofficial
+            CBits::Zero0
+            | CBits::Zero1
+            | CBits::Zero2
+            | CBits::Zero3
+            | CBits::Zero4
+            | CBits::Zero5
+            | CBits::Zero6
+            | CBits::Zero7
+            | CBits::Zero8
+            | CBits::Zero9 => 0,
+            CBits::NegOne0
+            | CBits::NegOne1
+            | CBits::NegOne2
+            | CBits::NegOne3
+            | CBits::NegOne4
+            | CBits::NegOne5
+            | CBits::NegOne6
+            | CBits::NegOne7
+            | CBits::NegOne8
+            | CBits::NegOne9 => -1,
+            CBits::D0 | CBits::D1 | CBits::D2 => self.d,
+            CBits::A0 | CBits::A1 | CBits::A2 => self.a,
+            CBits::NotD0 | CBits::NotD1 | CBits::NotD2 => !self.d,
+            CBits::NotA0 | CBits::NotA1 | CBits::NotA2 => !self.a,
+            CBits::DNandA => !self.d | !self.a,
+            CBits::NotOfDPlusA => !(self.d.wrapping_add(self.a)),
+            CBits::DAndNotA => self.d & !self.a,
+            CBits::NotDOrA => !self.d | self.a,
+            CBits::DPlusNotA => self.d.wrapping_add(!self.a),
+            CBits::NotDAndA => !self.d & self.a,
+            CBits::DOrNotA => self.d | !self.a,
+            CBits::NotDPlusA => (!self.d).wrapping_add(self.a),
+            CBits::DNorA => !self.d & !self.a,
+            CBits::NotDPlusNotA => (!self.d).wrapping_add(!self.a),
+            CBits::NotDMinus1 => (!self.d).wrapping_sub(1),
+            CBits::NotNotDPlusNotA => !((!self.d).wrapping_add(!self.a)),
+            CBits::NotAMinus1 => (!self.a).wrapping_sub(1),
+            CBits::NegTwo => -2,
         }
     }
 
     pub fn tick(&mut self) -> Result<Option<ScreenUpdate>> {
+    //pub fn tick(&mut self) -> Result<()> {
         use InstructionType as Inst;
         let inst = self.rom[self.pc];
         self.pc += 1;
@@ -136,9 +191,10 @@ impl<'a> Cpu<'a> {
                 {
                     self.pc = self.a as usize;
                 }
+                
                 // Do not allow writing to the KBD register
                 // Handle the M destination first to avoid writing to the wrong address.
-                if c.dest().m() && self.a != KBD && self.m() != comp {
+                if c.dest().m() && self.a != KBD {
                     // Check to see if the A register is pointing to an address in the screen
                     if SCREEN.contains(&self.a) && self.m() != comp {
                         rect = Some(ScreenUpdate::new(self.a, comp));
@@ -156,6 +212,7 @@ impl<'a> Cpu<'a> {
             }
         }
         Ok(rect)
+        //Ok(())
     }
 
     /// Sets the D register to the current stack top, and decrements the stack pointer
@@ -196,13 +253,13 @@ impl<'a> Cpu<'a> {
             VmCommand::Pop(seg, i) => {
                 self.pop();
                 let addr = match seg {
-                    Seg::Argument => self.at(ARG) + i,
-                    Seg::Local => self.at(LCL) + i,
-                    Seg::Static => 16 + i,
-                    Seg::This => self.at(THIS) + i,
-                    Seg::That => self.at(THAT) + i,
-                    Seg::Pointer => THIS + i,
-                    Seg::Temp => 5 + i,
+                    Seg::Argument => self.at(ARG).wrapping_add(i),
+                    Seg::Local => self.at(LCL).wrapping_add(i),
+                    Seg::Static => 16i16.wrapping_add(i),
+                    Seg::This => self.at(THIS).wrapping_add(i),
+                    Seg::That => self.at(THAT).wrapping_add(i),
+                    Seg::Pointer => THIS.wrapping_add(i),
+                    Seg::Temp => 5i16.wrapping_add(i),
                     // Cannot pop to constants
                     Seg::Constant => unreachable!(),
                 };
@@ -210,7 +267,14 @@ impl<'a> Cpu<'a> {
             }
             VmCommand::Label(_) => todo!(),
             VmCommand::Goto(_) => todo!(),
-            _ => todo!(),
+            VmCommand::IfGoto(_) => todo!(),
+            VmCommand::Function(_, _) => todo!(),
+            VmCommand::Call(fun, n) => {
+                *self.sp() += 5;
+                let sp = *self.sp() as usize;
+                //&mut self.ram.copy_within();
+            },
+            VmCommand::Return => todo!(),
         }
     }
 }

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #![allow(clippy::unusual_byte_groupings)]
-
+mod optimizer;
 mod asm;
 mod cpu;
 mod vm;
@@ -17,6 +17,8 @@ use cpu::Cpu;
 use io::{get_key, SCREEN_ROW_BYTES};
 use sdl2::{event::Event, pixels::Color};
 use std::path::PathBuf;
+
+use crate::io::SCREEN_PIXELS;
 
 #[derive(Debug, Parser)]
 pub struct ProgArgs {
@@ -70,14 +72,16 @@ fn main() -> Result<(), String> {
         .build()
         .expect("Could not create canvas");
 
-    canvas.set_logical_size(512, 256).expect("Could not set logical size");
+    canvas
+        .set_logical_size(512, 256)
+        .expect("Could not set logical size");
 
     let creator = canvas.texture_creator();
 
     let mut screen = creator
         .create_texture_streaming(Some(sdl2::pixels::PixelFormatEnum::RGB24), 512, 256)
         .expect("failed to create texture");
-
+    screen.update(None, &[255; SCREEN_PIXELS], SCREEN_ROW_BYTES).unwrap();
     //let screen = Screen::new(canvas, texture);
 
     let mut assembler = Assembler::new();
@@ -145,38 +149,39 @@ fn main() -> Result<(), String> {
 
     ]);
 
-    canvas.set_draw_color(Color::WHITE);
-    canvas.fill_rect(None)?;
-    canvas.present();
+    
     let mut cpu = Cpu::new(&asm);
     let mut event_pump = sdl_context.event_pump()?;
     let mut last_frame = std::time::Instant::now();
     let mut ticks = 0;
     let start = last_frame;
+    let mut frames = 0;
     'running: loop {
         if last_frame.elapsed().as_millis() >= 50 {
+            canvas.copy(&screen, None, None)?;
             canvas.present();
             last_frame = std::time::Instant::now();
-        }
-        if let Some(event) = event_pump.poll_event() {
-            match event {
-                Event::Quit { .. } => break 'running,
-                Event::KeyDown { .. } | Event::KeyUp { .. } => {
-                    cpu.set_kbd(get_key(event_pump.keyboard_state()))
+            while let Some(event) = event_pump.poll_event() {
+                match event {
+                    Event::Quit { .. } => break 'running,
+                    Event::KeyDown { .. } | Event::KeyUp { .. } => {
+                        cpu.set_kbd(get_key(event_pump.keyboard_state()))
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
+            frames += 1;
         }
         if let Some(update) = cpu.tick().map_err(|e| e.to_string())? {
             screen
                 .update(update.rect, &update.pixels, SCREEN_ROW_BYTES)
                 .map_err(|e| e.to_string())?;
-            canvas.copy(&screen, update.rect, update.rect)?;
         }
         ticks += 1;
     }
     let elapsed = start.elapsed().as_secs_f64();
     println!("{}", ticks as f64 / elapsed);
+    println!("{}", ticks as f64 / frames as f64);
 
     Ok(())
 }
