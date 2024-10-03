@@ -3,6 +3,9 @@ use arbitrary_int::{u15, u3, u7};
 use bitbybit::{bitenum, bitfield};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
 
 #[bitenum(u3, exhaustive: true)]
 #[derive(Debug, PartialEq)]
@@ -19,7 +22,7 @@ pub enum Dest {
     /// The value computed by the ALU in the `comp` segment will be stored in the `D` register
     D = 2,
 
-    /// The value computed by the ALU in the `comp` segment will be stored in `M` and `D` registers
+    /// The value computed by the ALU in the `comp` segment will be stored in the `M` and `D` registers
     MD = 3,
 
     /// The value computed by the ALU in the `comp` segment will be stored in the `A` register
@@ -798,11 +801,11 @@ impl Instruction {
     ///
     /// In implementations where bits 13 and 14 are fully specified (perhaps with extension chips)
     /// there is not necessarily a need to return a `Result`.
-    pub(crate) const fn get(&self) -> Result<InstructionType> {
+    pub(crate) const fn get(&self) -> Result<InstructionType, i16> {
         match (self.a_inst(), self.non_a_inst()) {
             (Ok(_), _) => Ok(InstructionType::A(self.addr())),
             (_, Ok(NonAInst::C)) => Ok(InstructionType::C(self.c_inst())),
-            _ => todo!(),
+            _ => Err(self.raw_value as i16),
         }
     }
 
@@ -924,6 +927,11 @@ impl Instruction {
     pub const MAX: Self = Self {
         raw_value: i16::MAX as u16,
     };
+
+    /// The start of heap memory
+    /// 
+    /// Unofficial name to make reading assembly easier.
+    pub const HEAP: Self = Self { raw_value: 2048 };
 }
 
 impl PartialEq for Instruction {
@@ -1043,7 +1051,7 @@ impl std::fmt::Display for Asm<'_> {
         }
     }
 }
-impl Asm<'_> {
+impl<'a> Asm<'a> {
     /// The address of the stack pointer is always held at address 0.
     ///
     /// In the official specification, the stack pointer is one past the top of the stack,
@@ -1196,7 +1204,7 @@ impl Assembler {
         }
     }
 
-    fn parse_c_instruction<'a>(&self, input: &'a str) -> Result<Asm<'a>> {
+    fn parse_c_instruction<'a>(input: &'a str) -> Result<Asm<'a>> {
         // There will always be a computation field, so we set the bounds now
         let mut comp_start = 0;
         let mut comp_end = input.len();
@@ -1314,6 +1322,21 @@ impl Assembler {
     }
 }
 
+fn parse_asm<'a>(path: impl AsRef<Path>) -> Vec<Asm<'a>> {
+    let mut asm = vec![];
+
+    if let Ok(f) = File::open(path) {
+        let reader = BufReader::new(f);
+        for line in reader.lines().flatten() {
+            match line.trim().split_once("//") {
+                Some(("", comment)) => asm.push(Asm::Comment(Cow::from(comment.trim().to_string()))),
+                Some((inst, comment)) => asm.push([
+                    Asm::Comment(Cow::from(comment.trim().to_string())),
+                    Asm::parse_c_instruction(inst)]),
+            }
+        }
+    }
+}
 // fn write_bin() {
 //     let args: Vec<String> = std::env::args().collect();
 //     let filename = args[1].clone();

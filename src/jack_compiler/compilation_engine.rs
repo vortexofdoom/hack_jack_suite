@@ -54,6 +54,7 @@ impl CompilationEngine {
     }
 
     pub fn curr_token_is<T: ValidToken + PartialEq<Token>>(&self, other: T) -> bool {
+        self.curr_token.is_some_and(|t| *t == other)
         if let Some(t) = self.curr_token.as_ref() {
             other == *t
         } else {

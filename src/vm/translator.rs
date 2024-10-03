@@ -390,16 +390,15 @@ impl<'a> VmTranslator<'a> {
             @n_vars
             D=A
             @SP
-            AM=D+M
-            D=D-1
+            M=D+M
         ("{fn_name}$LocalLoop")
             @"{fn_name}$LocalLoopEnd"
-            D;JLT
+            D=D-1;JLT
             @LCL
             A=D+M
             M=0
             @"{fn_name}$LocalLoop"
-            D=D-1;JMP
+            0;JMP
         ("{fn_name}$LocalLoopEnd")
         ]);
     }

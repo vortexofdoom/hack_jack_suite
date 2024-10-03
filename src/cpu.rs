@@ -1,6 +1,6 @@
 use std::ops::{Index, RangeInclusive};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use crate::{
     asm::*,
@@ -167,13 +167,11 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    pub fn tick(&mut self) -> Result<Option<ScreenUpdate>> {
-    //pub fn tick(&mut self) -> Result<()> {
+    pub fn tick(&mut self) -> Result<()> {
         use InstructionType as Inst;
         let inst = self.rom[self.pc];
         self.pc += 1;
-        let mut rect = None;
-        match inst.get()? {
+        match inst.get().map_err(|i| anyhow!("{i} is not a valid instruction"))? {
             // an address will always be an unsigned 15 bit integer, so can never overflow an i16.
             Inst::A(addr) => {
                 self.a = addr.value() as i16;
@@ -195,10 +193,6 @@ impl<'a> Cpu<'a> {
                 // Do not allow writing to the KBD register
                 // Handle the M destination first to avoid writing to the wrong address.
                 if c.dest().m() && self.a != KBD {
-                    // Check to see if the A register is pointing to an address in the screen
-                    if SCREEN.contains(&self.a) && self.m() != comp {
-                        rect = Some(ScreenUpdate::new(self.a, comp));
-                    }
                     *self.m_mut() = comp;
                 }
 
@@ -211,8 +205,7 @@ impl<'a> Cpu<'a> {
                 }
             }
         }
-        Ok(rect)
-        //Ok(())
+        Ok(())
     }
 
     /// Sets the D register to the current stack top, and decrements the stack pointer

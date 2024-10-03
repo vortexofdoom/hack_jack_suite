@@ -34,7 +34,7 @@ const fn get_register(addr: i16) -> (i32, i32, u32, u32) {
 
 
 // TODO: This can be optimized and maaaaybe even const somehow
-fn as_pixels(value: i16) -> [u8; 48] {
+pub fn as_pixels(value: i16) -> [u8; 48] {
     match value {
         0 => [255; 48],
         -1 => [0; 48],
